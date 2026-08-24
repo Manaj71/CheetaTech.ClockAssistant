@@ -18,4 +18,9 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\CheetaTech.ClockAssistant.Core\CheetaTech.ClockAssistant.Core.csproj" />
+    <ProjectReference Include="..\CheetaTech.ClockAssistant.Providers.UKG\CheetaTech.ClockAssistant.Providers.UKG.csproj" />
+  </ItemGroup>
+
 </Project>
