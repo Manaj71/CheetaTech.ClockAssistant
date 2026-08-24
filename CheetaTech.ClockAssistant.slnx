@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="CheetaTech.ClockAssistant.App/CheetaTech.ClockAssistant.App.csproj" />
+  <Project Path="CheetaTech.ClockAssistant.Core/CheetaTech.ClockAssistant.Core.csproj" />
+  <Project Path="CheetaTech.ClockAssistant.Providers.UKG/CheetaTech.ClockAssistant.Providers.UKG.csproj" />
+  <Project Path="CheetaTech.ClockAssistant.Tests/CheetaTech.ClockAssistant.Tests.csproj" />
+</Solution>
