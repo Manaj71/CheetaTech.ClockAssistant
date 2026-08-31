@@ -78,6 +78,127 @@ public sealed class UkgReadyProvider : ITimeClockProvider
         }
     }
 
+    public async Task<ProviderResult> ValidateCredentialsAsync(
+        string username,
+        string password)
+    {
+        var timestamp = DateTimeOffset.UtcNow;
+
+        if (string.IsNullOrWhiteSpace(username))
+        {
+            return Failure(
+                action: "ValidateCredentials",
+                timestamp: timestamp,
+                technicalStatus: "InvalidConfiguration",
+                errorMessage: "UKG username is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(password))
+        {
+            return Failure(
+                action: "ValidateCredentials",
+                timestamp: timestamp,
+                technicalStatus: "InvalidConfiguration",
+                errorMessage: "UKG password is required.");
+        }
+
+        try
+        {
+            var pageInfo = await GetClockPageAsync()
+                .ConfigureAwait(false);
+
+            var preparedRequest = UkgLoginRequestBuilder.Prepare(
+                pageInfo,
+                new UkgCredentials(
+                    username,
+                    password));
+
+            using var content = new FormUrlEncodedContent(
+                preparedRequest.FormFields);
+
+            using var request = new HttpRequestMessage(
+                HttpMethod.Post,
+                preparedRequest.PostUrl)
+            {
+                Content = content
+            };
+
+            using var response = await _httpClient
+                .SendAsync(request)
+                .ConfigureAwait(false);
+
+            var responseHtml = await response.Content
+                .ReadAsStringAsync()
+                .ConfigureAwait(false);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return Failure(
+                    action: "ValidateCredentials",
+                    timestamp: timestamp,
+                    technicalStatus: $"HTTP_{(int)response.StatusCode}",
+                    errorMessage:
+                        $"UKG credential validation returned HTTP {(int)response.StatusCode}.");
+            }
+
+            var parsed =
+                UkgCredentialValidationResponseParser.Parse(
+                    responseHtml);
+
+            return new ProviderResult
+            {
+                Success = parsed.Success,
+                Action = "ValidateCredentials",
+                ProviderMessage = parsed.ProviderMessage,
+                Timestamp = timestamp,
+                TechnicalStatus = parsed.TechnicalStatus,
+                ErrorMessage = parsed.Success
+                    ? null
+                    : parsed.ProviderMessage
+                        ?? "UKG did not confirm the credentials."
+            };
+        }
+        catch (UkgHttpStatusException ex)
+        {
+            return Failure(
+                action: "ValidateCredentials",
+                timestamp: timestamp,
+                technicalStatus: $"HTTP_{ex.StatusCode}",
+                errorMessage: ex.Message);
+        }
+        catch (HttpRequestException ex)
+        {
+            return Failure(
+                action: "ValidateCredentials",
+                timestamp: timestamp,
+                technicalStatus: "NetworkUnavailable",
+                errorMessage: ex.Message);
+        }
+        catch (TaskCanceledException ex)
+        {
+            return Failure(
+                action: "ValidateCredentials",
+                timestamp: timestamp,
+                technicalStatus: "NetworkUnavailable",
+                errorMessage: ex.Message);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Failure(
+                action: "ValidateCredentials",
+                timestamp: timestamp,
+                technicalStatus: "ProviderChanged",
+                errorMessage: ex.Message);
+        }
+        catch (ArgumentException ex)
+        {
+            return Failure(
+                action: "ValidateCredentials",
+                timestamp: timestamp,
+                technicalStatus: "InvalidConfiguration",
+                errorMessage: ex.Message);
+        }
+    }
     public Task<ProviderResult> ClockInAsync()
     {
         return ExecutePunchAsync(UkgPunchAction.ClockIn);
@@ -253,3 +374,4 @@ public sealed class UkgReadyProvider : ITimeClockProvider
         public int StatusCode { get; }
     }
 }
+

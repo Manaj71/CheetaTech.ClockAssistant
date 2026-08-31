@@ -1,0 +1,215 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    x:Class="CheetaTech.ClockAssistant.App.SetupPage"
+    Title="Clock Assistant Setup">
+
+    <ScrollView>
+        <VerticalStackLayout
+            Padding="24"
+            Spacing="14"
+            MaximumWidthRequest="640"
+            HorizontalOptions="Center">
+
+            <Label
+                Text="CheetaTech Clock Assistant"
+                FontSize="28"
+                FontAttributes="Bold"
+                SemanticProperties.HeadingLevel="Level1" />
+
+            <Label
+                Text="Initial Setup"
+                FontSize="20"
+                FontAttributes="Bold"
+                SemanticProperties.HeadingLevel="Level2" />
+
+            <Border Padding="12" StrokeThickness="1">
+                <VerticalStackLayout Spacing="4">
+                    <Label Text="DRYRUN MODE" FontAttributes="Bold" />
+                    <Label
+                        Text="This screen validates the complete Setup candidate locally only. Nothing is sent to the provider and nothing is saved yet."
+                        LineBreakMode="WordWrap" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Label Text="Provider" FontAttributes="Bold" />
+            <Picker
+                x:Name="ProviderTypePicker"
+                Title="Select provider"
+                AutomationId="SetupProviderType">
+                <Picker.Items>
+                    <x:String>UKG</x:String>
+                </Picker.Items>
+            </Picker>
+
+            <Label Text="Provider URL" FontAttributes="Bold" />
+            <Entry
+                x:Name="ProviderUrlEntry"
+                Placeholder="https://provider.example/clock"
+                Keyboard="Url"
+                ClearButtonVisibility="WhileEditing"
+                AutomationId="SetupProviderUrl" />
+
+            <Label Text="Username" FontAttributes="Bold" />
+            <Entry
+                x:Name="UsernameEntry"
+                Placeholder="Enter provider username"
+                ClearButtonVisibility="WhileEditing"
+                ReturnType="Next"
+                AutomationId="SetupUsername" />
+
+            <Label Text="Password" FontAttributes="Bold" />
+            <Entry
+                x:Name="PasswordEntry"
+                Placeholder="Enter provider password"
+                IsPassword="True"
+                ClearButtonVisibility="WhileEditing"
+                ReturnType="Done"
+                AutomationId="SetupPassword" />
+
+            <Label Text="Workdays" FontAttributes="Bold" />
+
+            <Grid
+                ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+                ColumnSpacing="14">
+
+                <VerticalStackLayout Grid.Column="0" Spacing="2" HorizontalOptions="Center">
+                    <CheckBox
+                        x:Name="MondayCheckBox"
+                        IsChecked="True"
+                        HorizontalOptions="Center"
+                        AutomationId="SetupMonday" />
+                    <Label Text="Mon" HorizontalTextAlignment="Center" />
+                </VerticalStackLayout>
+
+                <VerticalStackLayout Grid.Column="1" Spacing="2" HorizontalOptions="Center">
+                    <CheckBox
+                        x:Name="TuesdayCheckBox"
+                        IsChecked="True"
+                        HorizontalOptions="Center"
+                        AutomationId="SetupTuesday" />
+                    <Label Text="Tue" HorizontalTextAlignment="Center" />
+                </VerticalStackLayout>
+
+                <VerticalStackLayout Grid.Column="2" Spacing="2" HorizontalOptions="Center">
+                    <CheckBox
+                        x:Name="WednesdayCheckBox"
+                        IsChecked="True"
+                        HorizontalOptions="Center"
+                        AutomationId="SetupWednesday" />
+                    <Label Text="Wed" HorizontalTextAlignment="Center" />
+                </VerticalStackLayout>
+
+                <VerticalStackLayout Grid.Column="3" Spacing="2" HorizontalOptions="Center">
+                    <CheckBox
+                        x:Name="ThursdayCheckBox"
+                        IsChecked="True"
+                        HorizontalOptions="Center"
+                        AutomationId="SetupThursday" />
+                    <Label Text="Thu" HorizontalTextAlignment="Center" />
+                </VerticalStackLayout>
+
+                <VerticalStackLayout Grid.Column="4" Spacing="2" HorizontalOptions="Center">
+                    <CheckBox
+                        x:Name="FridayCheckBox"
+                        IsChecked="True"
+                        HorizontalOptions="Center"
+                        AutomationId="SetupFriday" />
+                    <Label Text="Fri" HorizontalTextAlignment="Center" />
+                </VerticalStackLayout>
+
+                <VerticalStackLayout Grid.Column="5" Spacing="2" HorizontalOptions="Center">
+                    <CheckBox
+                        x:Name="SaturdayCheckBox"
+                        IsChecked="False"
+                        HorizontalOptions="Center"
+                        AutomationId="SetupSaturday" />
+                    <Label Text="Sat" HorizontalTextAlignment="Center" />
+                </VerticalStackLayout>
+
+                <VerticalStackLayout Grid.Column="6" Spacing="2" HorizontalOptions="Center">
+                    <CheckBox
+                        x:Name="SundayCheckBox"
+                        IsChecked="False"
+                        HorizontalOptions="Center"
+                        AutomationId="SetupSunday" />
+                    <Label Text="Sun" HorizontalTextAlignment="Center" />
+                </VerticalStackLayout>
+
+            </Grid>
+
+            <Label Text="Clock In time" FontAttributes="Bold" />
+            <TimePicker
+                x:Name="ClockInTimePicker"
+                Time="07:53:00"
+                AutomationId="SetupClockInTime" />
+
+            <Label Text="Clock Out time" FontAttributes="Bold" />
+            <TimePicker
+                x:Name="ClockOutTimePicker"
+                Time="15:00:00"
+                AutomationId="SetupClockOutTime" />
+
+            <Label Text="Time zone" FontAttributes="Bold" />
+            <Entry
+                x:Name="TimeZoneEntry"
+                Text="America/Toronto"
+                Placeholder="America/Toronto"
+                ClearButtonVisibility="WhileEditing"
+                AutomationId="SetupTimeZone" />
+
+            <Label Text="Notification lead time (minutes)" FontAttributes="Bold" />
+            <Entry
+                x:Name="NotificationLeadMinutesEntry"
+                Text="15"
+                Keyboard="Numeric"
+                AutomationId="SetupNotificationLeadMinutes" />
+
+            <Label Text="Execution mode" FontAttributes="Bold" />
+            <Picker
+                x:Name="ExecutionModePicker"
+                Title="Select mode"
+                AutomationId="SetupExecutionMode">
+                <Picker.Items>
+                    <x:String>BasicConfirmation</x:String>
+                    <x:String>AdvancedAutomatic</x:String>
+                </Picker.Items>
+            </Picker>
+
+            <Label
+                Text="AdvancedAutomatic is only a requested mode. It does not grant Advanced entitlement."
+                FontSize="12"
+                LineBreakMode="WordWrap" />
+
+            <Button
+                x:Name="DryRunButton"
+                Text="DryRun Setup Check"
+                Clicked="OnDryRunSetupCheckClicked"
+                AutomationId="SetupDryRunCheck" />
+
+            <ActivityIndicator
+                x:Name="BusyIndicator"
+                IsRunning="False"
+                IsVisible="False" />
+
+            <Border Padding="12" StrokeThickness="1">
+                <VerticalStackLayout Spacing="4">
+                    <Label Text="Status" FontAttributes="Bold" />
+                    <Label
+                        x:Name="StatusLabel"
+                        Text="Complete the Setup fields, then run the local DryRun check."
+                        LineBreakMode="WordWrap"
+                        AutomationId="SetupStatus" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Label
+                Text="Security: this S031H DryRun does not save credentials or configuration."
+                FontSize="12"
+                LineBreakMode="WordWrap" />
+
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>
+

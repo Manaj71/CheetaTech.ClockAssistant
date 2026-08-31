@@ -55,6 +55,132 @@ public sealed class UkgReadyProviderTests
     }
 
     [Fact]
+    public async Task ValidateCredentialsAsync_Uses_Login_Action_And_Returns_Accepted()
+    {
+        var handler = new SequenceHttpMessageHandler(
+            Response(
+                HttpStatusCode.OK,
+                ClockPage("VALIDATE")),
+            Response(
+                HttpStatusCode.OK,
+                "<html><body>Welcome back MANSOOR</body></html>"));
+
+        using var httpClient = new HttpClient(handler);
+        var provider = CreateProvider(
+            httpClient,
+            credentials: null);
+
+        var result = await provider.ValidateCredentialsAsync(
+            "fake-user",
+            "fake-password");
+
+        Assert.True(result.Success);
+        Assert.Equal(
+            "ValidateCredentials",
+            result.Action);
+        Assert.Equal(
+            "CredentialsAccepted",
+            result.TechnicalStatus);
+
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.Equal(
+            HttpMethod.Get,
+            handler.Requests[0].Method);
+        Assert.Equal(
+            HttpMethod.Post,
+            handler.Requests[1].Method);
+
+        var postedBody = handler.Requests[1].Body!;
+
+        Assert.Contains(
+            "Username=fake-user",
+            postedBody);
+        Assert.Contains(
+            "Password=fake-password",
+            postedBody);
+        Assert.Contains(
+            "%24LoginAction=Login",
+            postedBody);
+        Assert.Contains(
+            "%24action=",
+            postedBody);
+        Assert.Contains(
+            "%24actionPrm=",
+            postedBody);
+
+        Assert.DoesNotContain(
+            "DoPunch",
+            postedBody,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(
+            "PUNCH_IN",
+            postedBody,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(
+            "PUNCH_OUT",
+            postedBody,
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ValidateCredentialsAsync_Returns_Rejected_For_Invalid_Password()
+    {
+        var handler = new SequenceHttpMessageHandler(
+            Response(
+                HttpStatusCode.OK,
+                ClockPage("BADLOGIN")),
+            Response(
+                HttpStatusCode.OK,
+                """
+                <html>
+                  <body>
+                    <div>Invalid password. Please try again.</div>
+                    <form name='TheForm'>
+                      <input name='Username' />
+                      <input name='Password' type='password' />
+                      <button onclick='doLogin()'>Sign In</button>
+                    </form>
+                  </body>
+                </html>
+                """));
+
+        using var httpClient = new HttpClient(handler);
+        var provider = CreateProvider(
+            httpClient,
+            credentials: null);
+
+        var result = await provider.ValidateCredentialsAsync(
+            "fake-user",
+            "wrong-password");
+
+        Assert.False(result.Success);
+        Assert.Equal(
+            "CredentialsRejected",
+            result.TechnicalStatus);
+        Assert.Equal(2, handler.Requests.Count);
+    }
+
+    [Fact]
+    public async Task ValidateCredentialsAsync_Rejects_Empty_Username_Without_Request()
+    {
+        var handler = new SequenceHttpMessageHandler();
+
+        using var httpClient = new HttpClient(handler);
+        var provider = CreateProvider(
+            httpClient,
+            credentials: null);
+
+        var result = await provider.ValidateCredentialsAsync(
+            string.Empty,
+            "fake-password");
+
+        Assert.False(result.Success);
+        Assert.Equal(
+            "InvalidConfiguration",
+            result.TechnicalStatus);
+        Assert.Empty(handler.Requests);
+    }
+    [Fact]
     public async Task ClockInAsync_Performs_Get_Then_Post_And_Returns_ProviderConfirmed()
     {
         var handler = new SequenceHttpMessageHandler(
@@ -277,3 +403,4 @@ public sealed class UkgReadyProviderTests
         Uri RequestUri,
         string? Body);
 }
+

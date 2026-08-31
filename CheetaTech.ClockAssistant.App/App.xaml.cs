@@ -1,16 +1,22 @@
-﻿using Microsoft.Extensions.DependencyInjection;
-
-namespace CheetaTech.ClockAssistant.App;
+﻿namespace CheetaTech.ClockAssistant.App;
 
 public partial class App : Application
 {
-	public App()
-	{
-		InitializeComponent();
-	}
+    private readonly AppShell _appShell;
 
-	protected override Window CreateWindow(IActivationState? activationState)
-	{
-		return new Window(new AppShell());
-	}
+    public App(AppShell appShell)
+    {
+        InitializeComponent();
+
+        _appShell =
+            appShell
+            ?? throw new ArgumentNullException(
+                nameof(appShell));
+    }
+
+    protected override Window CreateWindow(
+        IActivationState? activationState)
+    {
+        return new Window(_appShell);
+    }
 }
