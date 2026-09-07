@@ -1,4 +1,4 @@
-using CheetaTech.ClockAssistant.App.Services.Security;
+﻿using CheetaTech.ClockAssistant.App.Services.Security;
 using CheetaTech.ClockAssistant.App.Services.Credentials;
 using CheetaTech.ClockAssistant.App.Services.Configuration;
 using CheetaTech.ClockAssistant.Core.Configuration;
@@ -59,6 +59,8 @@ builder.Services.AddSingleton<
 		builder.Logging.AddDebug();
 #endif
 
-		return builder.Build();
+        builder.Services.AddSingleton<CheetaTech.ClockAssistant.Core.Attendance.IAttendanceStatePersistence, CheetaTech.ClockAssistant.App.Services.Attendance.PreferencesAttendanceStatePersistence>();
+        builder.Services.AddSingleton<CheetaTech.ClockAssistant.Core.Attendance.IAttendanceStateStore, CheetaTech.ClockAssistant.Core.Attendance.AttendanceStateStore>();
+        return builder.Build();
 	}
 }
