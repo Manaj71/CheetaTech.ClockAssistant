@@ -55,15 +55,20 @@ public sealed class UkgReadyProviderTests
     }
 
     [Fact]
-    public async Task ValidateCredentialsAsync_Uses_Login_Action_And_Returns_Accepted()
+    public async Task ValidateCredentialsAsync_Returns_Accepted_For_SameProvider_Home_Redirect()
     {
+        var redirect = Response(
+            HttpStatusCode.Redirect,
+            string.Empty);
+
+        redirect.Headers.Location =
+            new Uri("/ta/Tenant.home?rnd=AUTH", UriKind.Relative);
+
         var handler = new SequenceHttpMessageHandler(
             Response(
                 HttpStatusCode.OK,
                 ClockPage("VALIDATE")),
-            Response(
-                HttpStatusCode.OK,
-                "<html><body>Welcome back MANSOOR</body></html>"));
+            redirect);
 
         using var httpClient = new HttpClient(handler);
         var provider = CreateProvider(
@@ -120,6 +125,36 @@ public sealed class UkgReadyProviderTests
             "PUNCH_OUT",
             postedBody,
             StringComparison.OrdinalIgnoreCase);
+    }
+    [Fact]
+    public async Task ValidateCredentialsAsync_Does_Not_Accept_External_Home_Redirect()
+    {
+        var redirect = Response(
+            HttpStatusCode.Redirect,
+            string.Empty);
+
+        redirect.Headers.Location =
+            new Uri("https://malicious.example/ta/Tenant.home");
+
+        var handler = new SequenceHttpMessageHandler(
+            Response(
+                HttpStatusCode.OK,
+                ClockPage("VALIDATE")),
+            redirect);
+
+        using var httpClient = new HttpClient(handler);
+        var provider = CreateProvider(
+            httpClient,
+            credentials: null);
+
+        var result = await provider.ValidateCredentialsAsync(
+            "fake-user",
+            "fake-password");
+
+        Assert.False(result.Success);
+        Assert.Equal(
+            "HTTP_302",
+            result.TechnicalStatus);
     }
 
     [Fact]
@@ -180,6 +215,7 @@ public sealed class UkgReadyProviderTests
             result.TechnicalStatus);
         Assert.Empty(handler.Requests);
     }
+
     [Fact]
     public async Task ClockInAsync_Performs_Get_Then_Post_And_Returns_ProviderConfirmed()
     {
@@ -309,13 +345,38 @@ public sealed class UkgReadyProviderTests
         HttpClient httpClient,
         UkgCredentials? credentials)
     {
+        if (httpClient is null)
+        {
+            throw new ArgumentNullException(
+                nameof(httpClient));
+        }
+
+        var handlerField =
+            typeof(HttpMessageInvoker)
+                .GetField(
+                    "_handler",
+                    System.Reflection.BindingFlags.Instance |
+                    System.Reflection.BindingFlags.NonPublic);
+
+        var handler =
+            handlerField?.GetValue(httpClient)
+            as SequenceHttpMessageHandler;
+
+        if (handler is null)
+        {
+            throw new InvalidOperationException(
+                "UkgReadyProvider tests require SequenceHttpMessageHandler.");
+        }
+
         return new UkgReadyProvider(
             httpClient,
             new UkgProviderSettings
             {
                 ClockUrl = ClockUrl
             },
-            credentials);
+            credentials,
+            new TestCredentialValidationHttpClientFactory(
+                handler));
     }
 
     private static HttpResponseMessage Response(
@@ -392,10 +453,33 @@ public sealed class UkgReadyProviderTests
             }
 
             var response = _responses.Dequeue();
-            response.RequestMessage = request;
+
+            if (response.RequestMessage is null)
+            {
+                response.RequestMessage = request;
+            }
 
             return response;
         }
+    }
+    private sealed class TestCredentialValidationHttpClientFactory
+        : IUkgCredentialValidationHttpClientFactory
+    {
+        private readonly SequenceHttpMessageHandler _handler;
+
+        public TestCredentialValidationHttpClientFactory(
+            SequenceHttpMessageHandler handler)
+        {
+            _handler =
+                handler
+                ?? throw new ArgumentNullException(
+                    nameof(handler));
+        }
+
+        public HttpClient Create() =>
+            new HttpClient(
+                _handler,
+                disposeHandler: false);
     }
 
     private sealed record CapturedRequest(
@@ -403,4 +487,3 @@ public sealed class UkgReadyProviderTests
         Uri RequestUri,
         string? Body);
 }
-

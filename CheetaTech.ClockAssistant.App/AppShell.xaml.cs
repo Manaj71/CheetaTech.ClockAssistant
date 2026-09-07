@@ -1,4 +1,4 @@
-﻿using CheetaTech.ClockAssistant.Core.Configuration;
+using CheetaTech.ClockAssistant.Core.Configuration;
 
 namespace CheetaTech.ClockAssistant.App;
 
@@ -7,12 +7,14 @@ public partial class AppShell : Shell
     private readonly ISetupReadinessService _setupReadinessService;
     private readonly SetupPage _setupPage;
     private readonly MainPage _mainPage;
+    private readonly SettingsPage _settingsPage;
     private bool _startupRouteResolved;
 
     public AppShell(
         ISetupReadinessService setupReadinessService,
         SetupPage setupPage,
-        MainPage mainPage)
+        MainPage mainPage,
+        SettingsPage settingsPage)
     {
         InitializeComponent();
 
@@ -30,6 +32,19 @@ public partial class AppShell : Shell
             mainPage
             ?? throw new ArgumentNullException(
                 nameof(mainPage));
+
+        _settingsPage =
+            settingsPage
+            ?? throw new ArgumentNullException(
+                nameof(settingsPage));
+
+        _setupPage.SetupCompleted +=
+            OnSetupCompleted;
+
+        // Android MAUI Shell requires an active Shell item before the
+        // native Shell renderer begins creating its view hierarchy.
+        // Setup is the safe startup fallback until readiness is resolved.
+        ShowSetupPage();
     }
 
     protected override async void OnAppearing()
@@ -46,11 +61,7 @@ public partial class AppShell : Shell
             var readiness = await _setupReadinessService
                 .EvaluateAsync();
 
-            if (readiness.SetupRequired)
-            {
-                ShowSetupPage();
-            }
-            else
+            if (!readiness.SetupRequired)
             {
                 ShowMainPage();
             }
@@ -59,13 +70,14 @@ public partial class AppShell : Shell
         }
         catch
         {
-            ShowSetupPage();
+            // SetupPage is already the synchronous safe startup fallback.
             _startupRouteResolved = true;
         }
     }
 
     private void ShowSetupPage()
     {
+        FlyoutBehavior = FlyoutBehavior.Disabled;
         Items.Clear();
 
         Items.Add(
@@ -77,17 +89,51 @@ public partial class AppShell : Shell
             });
     }
 
+    private void OnSetupCompleted(
+        object? sender,
+        EventArgs e)
+    {
+        ShowMainPage();
+        _startupRouteResolved = true;
+    }
     private void ShowMainPage()
     {
         Items.Clear();
+        FlyoutBehavior = FlyoutBehavior.Flyout;
 
-        Items.Add(
+        var homeItem =
+            new FlyoutItem
+            {
+                Title = "Home",
+                Route = "Home"
+            };
+
+        homeItem.Items.Add(
             new ShellContent
             {
                 Title = "Home",
                 Route = "MainPage",
                 Content = _mainPage
             });
+
+        var settingsItem =
+            new FlyoutItem
+            {
+                Title = "Settings",
+                Route = "Settings"
+            };
+
+        settingsItem.Items.Add(
+            new ShellContent
+            {
+                Title = "Settings",
+                Route = "SettingsPage",
+                Content = _settingsPage
+            });
+
+        Items.Add(homeItem);
+        Items.Add(settingsItem);
+
+        CurrentItem = homeItem;
     }
 }
-

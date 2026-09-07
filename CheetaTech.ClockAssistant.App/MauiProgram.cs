@@ -20,7 +20,8 @@ public static class MauiProgram
 		builder.Services.AddSingleton<IConfigurationCompletenessEvaluator, ConfigurationCompletenessEvaluator>();
 		builder.Services.AddSingleton<ISetupReadinessService, SetupReadinessService>();
 		builder.Services.AddSingleton<ISetupLifecycleService, DryRunSetupLifecycleService>();
-		builder.Services.AddSingleton<ISetupPersistenceService, DryRunGuardedSetupPersistenceService>();
+		builder.Services.AddSingleton<ITrustedSetupPersistenceOrchestrator, TrustedSetupPersistenceOrchestrator>();
+		builder.Services.AddSingleton<ISetupPersistenceService, TrustedSetupPersistenceService>();
 
 		builder.Services.AddSingleton<HttpClient>();
 
@@ -29,11 +30,22 @@ public static class MauiProgram
 
 		// CredentialUpdateService resolves the provider from the candidate
 		// ClockAssistantConfiguration through ITimeClockProviderResolver.
-		builder.Services.AddSingleton<ICredentialUpdateService, CredentialUpdateService>();
+		builder.Services.AddSingleton<ICredentialUpdateService, DeferredCredentialUpdateService>();
 
 		builder.Services.AddSingleton<ICredentialSetupWorkflow, DryRunCredentialSetupWorkflow>();
 		builder.Services.AddTransient<SetupPage>();
 		builder.Services.AddTransient<MainPage>();
+		builder.Services.AddTransient<SettingsPage>();
+
+#if ANDROID
+builder.Services.AddSingleton<
+    CheetaTech.ClockAssistant.App.Services.Security.IDeviceAuthenticationService,
+    CheetaTech.ClockAssistant.App.Services.Security.AndroidDeviceAuthenticationService>();
+#else
+builder.Services.AddSingleton<
+    CheetaTech.ClockAssistant.App.Services.Security.IDeviceAuthenticationService,
+    CheetaTech.ClockAssistant.App.Services.Security.UnavailableDeviceAuthenticationService>();
+#endif
 		builder.Services.AddTransient<AppShell>();
 		builder
 			.UseMauiApp<App>()
@@ -50,10 +62,3 @@ public static class MauiProgram
 		return builder.Build();
 	}
 }
-
-
-
-
-
-
-

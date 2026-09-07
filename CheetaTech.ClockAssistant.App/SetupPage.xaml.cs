@@ -1,10 +1,12 @@
-﻿using CheetaTech.ClockAssistant.Core.Configuration;
+using CheetaTech.ClockAssistant.Core.Configuration;
 
 namespace CheetaTech.ClockAssistant.App;
 
 public partial class SetupPage : ContentPage
 {
     private readonly ISetupLifecycleService _setupLifecycleService;
+
+    public event EventHandler? SetupCompleted;
 
     public SetupPage(
         ISetupLifecycleService setupLifecycleService)
@@ -49,11 +51,21 @@ public partial class SetupPage : ContentPage
 
             StatusLabel.Text =
                 BuildStatusMessage(result);
+
+            if (result.Success
+                && result.ConfigurationSaved
+                && result.CredentialsSaved)
+            {
+                SetupCompleted?.Invoke(
+                    this,
+                    EventArgs.Empty);
+            }
         }
-        catch (Exception ex)
+        catch (Exception)
         {
+            // Do not expose raw exception/provider details in the Setup UI.
             StatusLabel.Text =
-                $"DryRun Setup check failed locally: {ex.Message}";
+                "Setup could not be saved. Please review your entries and try again.";
         }
         finally
         {
@@ -63,6 +75,18 @@ public partial class SetupPage : ContentPage
         }
     }
 
+    private void OnTogglePasswordClicked(
+        object? sender,
+        EventArgs e)
+    {
+        PasswordEntry.IsPassword =
+            !PasswordEntry.IsPassword;
+
+        TogglePasswordButton.Text =
+            PasswordEntry.IsPassword
+                ? "Show"
+                : "Hide";
+    }
     private ClockAssistantConfiguration BuildConfigurationCandidate()
     {
         var workDays =
@@ -191,5 +215,3 @@ public partial class SetupPage : ContentPage
             $"Review: {string.Join(", ", result.Issues)}.";
     }
 }
-
-

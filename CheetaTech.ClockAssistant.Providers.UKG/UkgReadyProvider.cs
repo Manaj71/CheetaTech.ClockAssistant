@@ -5,17 +5,33 @@ namespace CheetaTech.ClockAssistant.Providers.UKG;
 public sealed class UkgReadyProvider : ITimeClockProvider
 {
     private readonly HttpClient _httpClient;
+    private readonly IUkgCredentialValidationHttpClientFactory
+        _credentialValidationHttpClientFactory;
     private readonly UkgProviderSettings _settings;
     private readonly UkgCredentials? _credentials;
 
     public UkgReadyProvider(
         HttpClient httpClient,
         UkgProviderSettings settings,
-        UkgCredentials? credentials = null)
+        UkgCredentials? credentials = null,
+        IUkgCredentialValidationHttpClientFactory?
+            credentialValidationHttpClientFactory = null)
     {
-        _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
-        _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        _httpClient =
+            httpClient
+            ?? throw new ArgumentNullException(
+                nameof(httpClient));
+
+        _settings =
+            settings
+            ?? throw new ArgumentNullException(
+                nameof(settings));
+
         _credentials = credentials;
+
+        _credentialValidationHttpClientFactory =
+            credentialValidationHttpClientFactory
+            ?? new UkgCredentialValidationHttpClientFactory();
     }
 
     public async Task<ProviderResult> TestConnectionAsync()
@@ -104,7 +120,11 @@ public sealed class UkgReadyProvider : ITimeClockProvider
 
         try
         {
-            var pageInfo = await GetClockPageAsync()
+            using var validationHttpClient =
+                _credentialValidationHttpClientFactory.Create();
+
+            var pageInfo = await GetClockPageAsync(
+                    validationHttpClient)
                 .ConfigureAwait(false);
 
             var preparedRequest = UkgLoginRequestBuilder.Prepare(
@@ -123,13 +143,27 @@ public sealed class UkgReadyProvider : ITimeClockProvider
                 Content = content
             };
 
-            using var response = await _httpClient
+            using var response = await validationHttpClient
                 .SendAsync(request)
                 .ConfigureAwait(false);
 
             var responseHtml = await response.Content
                 .ReadAsStringAsync()
                 .ConfigureAwait(false);
+
+            if (IsAuthenticatedHomeResponse(
+                response,
+                _settings.ClockUrl))
+            {
+                return new ProviderResult
+                {
+                    Success = true,
+                    Action = "ValidateCredentials",
+                    ProviderMessage = "Provider accepted the credentials.",
+                    Timestamp = timestamp,
+                    TechnicalStatus = "CredentialsAccepted"
+                };
+            }
 
             if (!response.IsSuccessStatusCode)
             {
@@ -319,13 +353,19 @@ public sealed class UkgReadyProvider : ITimeClockProvider
         }
     }
 
-    private async Task<UkgClockPageInfo> GetClockPageAsync()
+    private Task<UkgClockPageInfo> GetClockPageAsync() =>
+        GetClockPageAsync(_httpClient);
+
+    private async Task<UkgClockPageInfo> GetClockPageAsync(
+        HttpClient httpClient)
     {
+        ArgumentNullException.ThrowIfNull(httpClient);
+
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
             _settings.ClockUrl);
 
-        using var response = await _httpClient
+        using var response = await httpClient
             .SendAsync(request)
             .ConfigureAwait(false);
 
@@ -345,6 +385,73 @@ public sealed class UkgReadyProvider : ITimeClockProvider
             _settings.ClockUrl);
     }
 
+    private static bool IsAuthenticatedHomeResponse(
+        HttpResponseMessage response,
+        Uri configuredClockUrl)
+    {
+        ArgumentNullException.ThrowIfNull(response);
+        ArgumentNullException.ThrowIfNull(configuredClockUrl);
+
+        if (IsAuthenticatedHomeUri(
+            response.RequestMessage?.RequestUri,
+            configuredClockUrl))
+        {
+            return true;
+        }
+
+        if ((int)response.StatusCode >= 300 &&
+            (int)response.StatusCode <= 399 &&
+            response.Headers.Location is not null)
+        {
+            var redirectUri = response.Headers.Location.IsAbsoluteUri
+                ? response.Headers.Location
+                : new Uri(
+                    response.RequestMessage?.RequestUri
+                        ?? configuredClockUrl,
+                    response.Headers.Location);
+
+            return IsAuthenticatedHomeUri(
+                redirectUri,
+                configuredClockUrl);
+        }
+
+        return false;
+    }
+
+    private static bool IsAuthenticatedHomeUri(
+        Uri? candidateUri,
+        Uri configuredClockUrl)
+    {
+        if (candidateUri is null ||
+            !candidateUri.IsAbsoluteUri)
+        {
+            return false;
+        }
+
+        if (!string.Equals(
+            candidateUri.Scheme,
+            configuredClockUrl.Scheme,
+            StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(
+                candidateUri.Host,
+                configuredClockUrl.Host,
+                StringComparison.OrdinalIgnoreCase) ||
+            candidateUri.Port != configuredClockUrl.Port)
+        {
+            return false;
+        }
+
+        var configuredDirectory =
+            configuredClockUrl.AbsolutePath[..(
+                configuredClockUrl.AbsolutePath.LastIndexOf('/') + 1)];
+
+        return candidateUri.AbsolutePath.StartsWith(
+                configuredDirectory,
+                StringComparison.OrdinalIgnoreCase) &&
+            candidateUri.AbsolutePath.EndsWith(
+                ".home",
+                StringComparison.OrdinalIgnoreCase);
+    }
     private static ProviderResult Failure(
         string action,
         DateTimeOffset timestamp,
@@ -374,4 +481,3 @@ public sealed class UkgReadyProvider : ITimeClockProvider
         public int StatusCode { get; }
     }
 }
-

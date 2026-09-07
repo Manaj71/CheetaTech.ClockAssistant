@@ -28,7 +28,7 @@
 		<MauiXamlInflator>SourceGen</MauiXamlInflator>
 
 		<!-- Display name -->
-		<ApplicationTitle>CheetaTech.ClockAssistant.App</ApplicationTitle>
+		<ApplicationTitle>Clock Assistant</ApplicationTitle>
 
 		<!-- App Identifier -->
 		<ApplicationId>com.companyname.cheetatech.clockassistant.app</ApplicationId>
@@ -49,10 +49,10 @@
 
 	<ItemGroup>
 		<!-- App Icon -->
-		<MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#512BD4" />
+		<MauiIcon Include="Resources\AppIcon\clockassistant.png" />
 
 		<!-- Splash Screen -->
-		<MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#512BD4" BaseSize="128,128" />
+		<MauiSplashScreen Include="Resources\Splash\clockassistant.png" Color="#FFFFFF" BaseSize="256,256" />
 
 		<!-- Images -->
 		<MauiImage Include="Resources\Images\*" />
@@ -75,4 +75,8 @@
 	  <ProjectReference Include="..\CheetaTech.ClockAssistant.Providers.UKG\CheetaTech.ClockAssistant.Providers.UKG.csproj" />
 	</ItemGroup>
 
+
+	<ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+		<PackageReference Include="Xamarin.AndroidX.Biometric" Version="1.1.0.30" />
+	</ItemGroup>
 </Project>

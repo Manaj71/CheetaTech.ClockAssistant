@@ -1,4 +1,4 @@
-using CheetaTech.ClockAssistant.Core.Configuration;
+﻿using CheetaTech.ClockAssistant.Core.Configuration;
 using CheetaTech.ClockAssistant.Core.Providers;
 
 namespace CheetaTech.ClockAssistant.Core.Security;
@@ -33,7 +33,7 @@ public sealed class CredentialUpdateService : ICredentialUpdateService
                 Success: false,
                 CredentialsSaved: false,
                 TechnicalStatus: "InvalidConfiguration",
-                Message: "Username is required.");
+                Message: "Username is required.") { ProviderValidationPerformed = false };
         }
 
         if (string.IsNullOrWhiteSpace(candidate.Password))
@@ -42,7 +42,7 @@ public sealed class CredentialUpdateService : ICredentialUpdateService
                 Success: false,
                 CredentialsSaved: false,
                 TechnicalStatus: "InvalidConfiguration",
-                Message: "Password is required.");
+                Message: "Password is required.") { ProviderValidationPerformed = false };
         }
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -108,7 +108,6 @@ public sealed class CredentialUpdateService : ICredentialUpdateService
             Success: false,
             CredentialsSaved: false,
             TechnicalStatus: "ProviderResolutionFailed",
-            Message: exception.Message);
+            Message: exception.Message) { ProviderValidationPerformed = false };
     }
 }
-

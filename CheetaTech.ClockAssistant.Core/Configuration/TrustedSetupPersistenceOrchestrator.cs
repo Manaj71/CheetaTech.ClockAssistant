@@ -1,4 +1,4 @@
-using CheetaTech.ClockAssistant.Core.Security;
+﻿using CheetaTech.ClockAssistant.Core.Security;
 
 namespace CheetaTech.ClockAssistant.Core.Configuration;
 
@@ -160,7 +160,7 @@ public sealed class TrustedSetupPersistenceOrchestrator
                 Success: false,
                 Stage: SetupPersistenceStage.Failed,
                 PersistenceAttempted: true,
-                ProviderValidationPerformed: true,
+                ProviderValidationPerformed: false,
                 ConfigurationSaved: false,
                 CredentialsSaved: false,
                 Issues: credentialFailureIssues,
@@ -198,7 +198,7 @@ public sealed class TrustedSetupPersistenceOrchestrator
                 Success: false,
                 Stage: SetupPersistenceStage.Failed,
                 PersistenceAttempted: true,
-                ProviderValidationPerformed: true,
+                ProviderValidationPerformed: credentialUpdate.ProviderValidationPerformed,
                 ConfigurationSaved: false,
                 CredentialsSaved: false,
                 Issues: credentialFailureIssues,
@@ -243,7 +243,7 @@ public sealed class TrustedSetupPersistenceOrchestrator
                     Success: false,
                     Stage: SetupPersistenceStage.Failed,
                     PersistenceAttempted: true,
-                    ProviderValidationPerformed: true,
+                    ProviderValidationPerformed: credentialUpdate.ProviderValidationPerformed,
                     ConfigurationSaved: true,
                     CredentialsSaved: true,
                     Issues: issuesAfterReadinessFailure,
@@ -257,7 +257,7 @@ public sealed class TrustedSetupPersistenceOrchestrator
                 Stage:
                     SetupPersistenceStage.ReadyConfirmed,
                 PersistenceAttempted: true,
-                ProviderValidationPerformed: true,
+                ProviderValidationPerformed: credentialUpdate.ProviderValidationPerformed,
                 ConfigurationSaved: true,
                 CredentialsSaved: true,
                 Issues: Array.Empty<string>(),
@@ -286,7 +286,7 @@ public sealed class TrustedSetupPersistenceOrchestrator
                 Success: false,
                 Stage: SetupPersistenceStage.Failed,
                 PersistenceAttempted: true,
-                ProviderValidationPerformed: true,
+                ProviderValidationPerformed: credentialUpdate.ProviderValidationPerformed,
                 ConfigurationSaved: false,
                 CredentialsSaved: true,
                 Issues: failureIssues,

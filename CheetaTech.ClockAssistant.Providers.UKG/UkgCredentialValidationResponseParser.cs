@@ -40,24 +40,6 @@ public static partial class UkgCredentialValidationResponseParser
             }
         }
 
-        var loginFormStillPresent =
-            UsernameInputRegex().IsMatch(html) &&
-            PasswordInputRegex().IsMatch(html) &&
-            DoLoginRegex().IsMatch(html);
-
-        var authenticatedSignal =
-            plainText.Contains(
-                "Welcome back",
-                StringComparison.OrdinalIgnoreCase);
-
-        if (authenticatedSignal && !loginFormStillPresent)
-        {
-            return new UkgCredentialValidationResponse(
-                Success: true,
-                TechnicalStatus: "CredentialsAccepted",
-                ProviderMessage: "Provider accepted the credentials.");
-        }
-
         return new UkgCredentialValidationResponse(
             Success: false,
             TechnicalStatus: "UnknownProviderResponse",

@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <ContentPage
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
@@ -26,9 +26,9 @@
 
             <Border Padding="12" StrokeThickness="1">
                 <VerticalStackLayout Spacing="4">
-                    <Label Text="DRYRUN MODE" FontAttributes="Bold" />
+                    <Label Text="Secure setup" FontAttributes="Bold" />
                     <Label
-                        Text="This screen validates the complete Setup candidate locally only. Nothing is sent to the provider and nothing is saved yet."
+                        Text="Enter your provider account and work schedule. Your credentials will be stored securely."
                         LineBreakMode="WordWrap" />
                 </VerticalStackLayout>
             </Border>
@@ -60,13 +60,25 @@
                 AutomationId="SetupUsername" />
 
             <Label Text="Password" FontAttributes="Bold" />
-            <Entry
-                x:Name="PasswordEntry"
-                Placeholder="Enter provider password"
-                IsPassword="True"
-                ClearButtonVisibility="WhileEditing"
-                ReturnType="Done"
-                AutomationId="SetupPassword" />
+            <Grid
+                ColumnDefinitions="*,Auto"
+                ColumnSpacing="8">
+                <Entry
+                    x:Name="PasswordEntry"
+                    Grid.Column="0"
+                    Placeholder="Enter provider password"
+                    IsPassword="True"
+                    ClearButtonVisibility="WhileEditing"
+                    ReturnType="Done"
+                    AutomationId="SetupPassword" />
+                <Button
+                    x:Name="TogglePasswordButton"
+                    Grid.Column="1"
+                    Text="Show"
+                    Clicked="OnTogglePasswordClicked"
+                    AutomationId="SetupPasswordVisibility"
+                    VerticalOptions="Center" />
+            </Grid>
 
             <Label Text="Workdays" FontAttributes="Bold" />
 
@@ -184,7 +196,7 @@
 
             <Button
                 x:Name="DryRunButton"
-                Text="DryRun Setup Check"
+                Text="Save Setup"
                 Clicked="OnDryRunSetupCheckClicked"
                 AutomationId="SetupDryRunCheck" />
 
@@ -198,18 +210,17 @@
                     <Label Text="Status" FontAttributes="Bold" />
                     <Label
                         x:Name="StatusLabel"
-                        Text="Complete the Setup fields, then run the local DryRun check."
+                        Text="Complete the fields below, then select Save Setup."
                         LineBreakMode="WordWrap"
                         AutomationId="SetupStatus" />
                 </VerticalStackLayout>
             </Border>
 
             <Label
-                Text="Security: this S031H DryRun does not save credentials or configuration."
+                Text="Your provider password is stored securely and is not shown after setup."
                 FontSize="12"
                 LineBreakMode="WordWrap" />
 
         </VerticalStackLayout>
     </ScrollView>
 </ContentPage>
-

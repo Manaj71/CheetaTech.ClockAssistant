@@ -5,12 +5,12 @@ namespace CheetaTech.ClockAssistant.Tests;
 public sealed class UkgCredentialValidationResponseParserTests
 {
     [Fact]
-    public void Parse_Returns_Accepted_For_Authenticated_Response()
+    public void Parse_Does_Not_Treat_Welcome_Back_Text_As_Credential_Acceptance()
     {
         const string html = """
             <html>
               <body>
-                <div>Welcome back MANSOOR</div>
+                <div>Welcome back</div>
                 <div>Employee Home</div>
               </body>
             </html>
@@ -19,9 +19,9 @@ public sealed class UkgCredentialValidationResponseParserTests
         var result =
             UkgCredentialValidationResponseParser.Parse(html);
 
-        Assert.True(result.Success);
+        Assert.False(result.Success);
         Assert.Equal(
-            "CredentialsAccepted",
+            "UnknownProviderResponse",
             result.TechnicalStatus);
     }
 
