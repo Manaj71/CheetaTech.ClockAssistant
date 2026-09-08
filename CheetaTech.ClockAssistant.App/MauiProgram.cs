@@ -1,4 +1,4 @@
-﻿using CheetaTech.ClockAssistant.App.Services.Security;
+using CheetaTech.ClockAssistant.App.Services.Security;
 using CheetaTech.ClockAssistant.App.Services.Credentials;
 using CheetaTech.ClockAssistant.App.Services.Configuration;
 using CheetaTech.ClockAssistant.Core.Configuration;
@@ -61,6 +61,28 @@ builder.Services.AddSingleton<
 
         builder.Services.AddSingleton<CheetaTech.ClockAssistant.Core.Attendance.IAttendanceStatePersistence, CheetaTech.ClockAssistant.App.Services.Attendance.PreferencesAttendanceStatePersistence>();
         builder.Services.AddSingleton<CheetaTech.ClockAssistant.Core.Attendance.IAttendanceStateStore, CheetaTech.ClockAssistant.Core.Attendance.AttendanceStateStore>();
+#if ANDROID
+        builder.Services.AddSingleton<CheetaTech.ClockAssistant.App.Services.Notifications.ILocalNotificationService, CheetaTech.ClockAssistant.App.Platforms.Android.AndroidLocalNotificationService>();
+#else
+        builder.Services.AddSingleton<CheetaTech.ClockAssistant.App.Services.Notifications.ILocalNotificationService, CheetaTech.ClockAssistant.App.Services.Notifications.UnavailableLocalNotificationService>();
+#endif
+
+        builder.Services.AddSingleton<CheetaTech.ClockAssistant.Core.Attendance.AttendanceStateEvaluator>();
+        builder.Services.AddSingleton<CheetaTech.ClockAssistant.Core.Attendance.IAttendanceNotificationDecisionService, CheetaTech.ClockAssistant.Core.Attendance.AttendanceNotificationDecisionService>();
+
+#if ANDROID
+        builder.Services.AddSingleton<CheetaTech.ClockAssistant.App.Services.Notifications.IAttendanceReminderScheduler, CheetaTech.ClockAssistant.App.Platforms.Android.AndroidAttendanceReminderScheduler>();
+#else
+        builder.Services.AddSingleton<CheetaTech.ClockAssistant.App.Services.Notifications.IAttendanceReminderScheduler, CheetaTech.ClockAssistant.App.Services.Notifications.UnavailableAttendanceReminderScheduler>();
+#endif
+        builder.Services.AddSingleton<CheetaTech.ClockAssistant.Core.Attendance.AttendanceSnoozePlanner>();
+
+        builder.Services.AddSingleton<CheetaTech.ClockAssistant.Core.Attendance.IAttendanceProviderExecutionGate, CheetaTech.ClockAssistant.Core.Attendance.DisabledAttendanceProviderExecutionGate>();
+        builder.Services.AddSingleton<CheetaTech.ClockAssistant.Core.Attendance.IAttendanceActionExecutionService, CheetaTech.ClockAssistant.Core.Attendance.AttendanceActionExecutionService>();
+
+        builder.Services.AddSingleton<CheetaTech.ClockAssistant.Core.Attendance.IAttendanceReminderPlanningService, CheetaTech.ClockAssistant.Core.Attendance.AttendanceReminderPlanningService>();
+        builder.Services.AddSingleton<CheetaTech.ClockAssistant.App.Services.Notifications.IAttendanceReminderStartupCoordinator, CheetaTech.ClockAssistant.App.Services.Notifications.AttendanceReminderStartupCoordinator>();
+
         return builder.Build();
 	}
 }
