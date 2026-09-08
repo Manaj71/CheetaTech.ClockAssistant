@@ -154,7 +154,7 @@ public sealed class AndroidLocalNotificationService : ILocalNotificationService
         var localActionBuilder =
             new NotificationCompat.Action.Builder(
                 global::CheetaTech.ClockAssistant.App.Resource.Drawable.notification_small_icon,
-                new Java.Lang.String(actionType == AttendanceActionType.ClockIn ? "Clock In Test" : "Clock Out Test"),
+                new Java.Lang.String(actionType == AttendanceActionType.ClockIn ? "Clock In" : "Clock Out"),
                 actionPendingIntent);
 
         localActionBuilder.SetAuthenticationRequired(false);

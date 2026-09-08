@@ -16,7 +16,7 @@ public sealed class AttendanceNotificationActionReceiver
         "CheetaTech.ClockAssistant.Action.SNOOZE";
 
     internal const string ActionConfirm =
-        "CheetaTech.ClockAssistant.Action.CONFIRM_ATTENDANCE_TEST";
+        "CheetaTech.ClockAssistant.Action.CONFIRM_ATTENDANCE";
 
     internal const string ExtraNotificationId =
         "CheetaTech.ClockAssistant.Extra.NOTIFICATION_ID";
@@ -243,17 +243,70 @@ public sealed class AttendanceNotificationActionReceiver
                 ? "Clock In"
                 : "Clock Out";
 
-        var title =
-            result.Status ==
-            AttendanceActionExecutionStatus.ExecutionDisabled
-                ? $"{actionName} execution path ready"
-                : $"{actionName} test result";
+        var (title, message) =
+            result.Status switch
+            {
+                AttendanceActionExecutionStatus.Succeeded =>
+                    (
+                        $"{actionName} successful",
+                        $"Provider confirmed {actionName}."
+                    ),
 
-        var message =
-            result.Status ==
-            AttendanceActionExecutionStatus.ExecutionDisabled
-                ? "Phase 5 revalidated. Live provider execution remains disabled."
-                : $"Safe test status: {result.Status}. Provider request sent: {result.ProviderRequestSent}.";
+                AttendanceActionExecutionStatus.ExecutionDisabled =>
+                    (
+                        $"{actionName} not authorized",
+                        "Controlled live execution is not enabled for this attendance date."
+                    ),
+
+                AttendanceActionExecutionStatus.NotEligible =>
+                    (
+                        $"{actionName} no longer due",
+                        "Attendance state changed before the action was processed."
+                    ),
+
+                AttendanceActionExecutionStatus.ProviderRejected =>
+                    (
+                        $"{actionName} failed",
+                        "The provider did not confirm the action."
+                    ),
+
+                AttendanceActionExecutionStatus.ProviderUnknown =>
+                    (
+                        $"{actionName} status uncertain",
+                        "Do not retry until the provider status is checked."
+                    ),
+
+                AttendanceActionExecutionStatus.PersistenceFailed
+                    when result.ProviderConfirmed =>
+                    (
+                        $"{actionName} needs attention",
+                        "The provider may have confirmed the action, but local state was not saved. Do not retry."
+                    ),
+
+                AttendanceActionExecutionStatus.MissingCredentials =>
+                    (
+                        $"{actionName} unavailable",
+                        "Stored credentials are unavailable. Open Clock Assistant."
+                    ),
+
+                AttendanceActionExecutionStatus.MissingConfiguration =>
+                    (
+                        $"{actionName} unavailable",
+                        "Attendance configuration is unavailable. Open Clock Assistant."
+                    ),
+
+                AttendanceActionExecutionStatus.ProviderResolutionFailed =>
+                    (
+                        $"{actionName} unavailable",
+                        "The configured provider could not be prepared."
+                    ),
+
+                _ =>
+                    (
+                        $"{actionName} needs attention",
+                        "The action could not be completed safely."
+                    )
+            };
 
         ShowResultNotification(
             context,

@@ -388,7 +388,10 @@ public sealed class AttendanceActionExecutionServiceTests
             _allowed = allowed;
         }
 
-        public bool IsExecutionAllowed()
+        public bool IsExecutionAllowed(
+            AttendanceActionType actionType,
+            DateOnly attendanceDate,
+            DateTimeOffset utcNow)
             => _allowed;
     }
     private sealed class FakeProvider

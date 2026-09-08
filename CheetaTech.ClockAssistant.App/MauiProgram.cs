@@ -77,7 +77,9 @@ builder.Services.AddSingleton<
 #endif
         builder.Services.AddSingleton<CheetaTech.ClockAssistant.Core.Attendance.AttendanceSnoozePlanner>();
 
-        builder.Services.AddSingleton<CheetaTech.ClockAssistant.Core.Attendance.IAttendanceProviderExecutionGate, CheetaTech.ClockAssistant.Core.Attendance.DisabledAttendanceProviderExecutionGate>();
+        builder.Services.AddSingleton<CheetaTech.ClockAssistant.Core.Attendance.IAttendanceProviderExecutionGate>(
+            _ => new CheetaTech.ClockAssistant.Core.Attendance.ControlledDateAttendanceProviderExecutionGate(
+                new DateOnly(2026, 9, 9)));
         builder.Services.AddSingleton<CheetaTech.ClockAssistant.Core.Attendance.IAttendanceActionExecutionService, CheetaTech.ClockAssistant.Core.Attendance.AttendanceActionExecutionService>();
 
         builder.Services.AddSingleton<CheetaTech.ClockAssistant.Core.Attendance.IAttendanceReminderPlanningService, CheetaTech.ClockAssistant.Core.Attendance.AttendanceReminderPlanningService>();

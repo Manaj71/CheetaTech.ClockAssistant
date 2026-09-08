@@ -91,7 +91,10 @@ public sealed class AttendanceActionExecutionService
                     evaluation.AttendanceDate);
             }
 
-            if (!_providerExecutionGate.IsExecutionAllowed())
+            if (!_providerExecutionGate.IsExecutionAllowed(
+                    actionType,
+                    evaluation.AttendanceDate,
+                    utcNow))
             {
                 return Result(
                     actionType,
