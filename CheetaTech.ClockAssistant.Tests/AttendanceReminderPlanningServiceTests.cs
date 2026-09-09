@@ -262,4 +262,51 @@ public sealed class AttendanceReminderPlanningServiceTests
             return Task.CompletedTask;
         }
     }
-}
+
+    [Fact]
+    public async Task PlanNextAsync_AfterClockOutTime_WithNoSuccessfulClockIn_PlansNextWorkdayClockIn()
+    {
+        var service =
+            CreateService(
+                configuration: Configuration());
+
+        var plan =
+            await service.PlanNextAsync(
+                new DateTimeOffset(
+                    2026, 9, 9, 20, 0, 0, TimeSpan.Zero));
+
+        Assert.NotNull(plan);
+        Assert.Equal(
+            AttendanceActionType.ClockIn,
+            plan!.ActionType);
+        Assert.Equal(
+            new DateOnly(2026, 9, 10),
+            plan.AttendanceDate);
+        Assert.Equal(
+            new DateTimeOffset(
+                2026, 9, 10, 10, 45, 0, TimeSpan.Zero),
+            plan.TriggerAtUtc);
+        Assert.False(plan.IsImmediate);
+    }
+    [Fact]
+    public async Task PlanNextAsync_ClockOutReminderWindow_NoSuccessfulClockIn_PlansClockOut()
+    {
+        var service =
+            CreateService(
+                configuration: Configuration());
+
+        var plan =
+            await service.PlanNextAsync(
+                new DateTimeOffset(
+                    2026, 9, 10, 19, 15, 0, TimeSpan.Zero));
+
+        Assert.NotNull(plan);
+        Assert.Equal(
+            AttendanceActionType.ClockOut,
+            plan!.ActionType);
+        Assert.Equal(
+            new DateOnly(2026, 9, 10),
+            plan.AttendanceDate);
+        Assert.True(
+            plan.IsImmediate);
+    }}

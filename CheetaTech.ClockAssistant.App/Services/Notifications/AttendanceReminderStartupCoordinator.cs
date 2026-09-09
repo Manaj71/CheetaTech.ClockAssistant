@@ -38,4 +38,24 @@ public sealed class AttendanceReminderStartupCoordinator
         return await _reminderScheduler.ScheduleOneTimeAsync(
             plan.TriggerAtUtc);
     }
-}
+
+    public async Task<AttendanceReminderScheduleResult?> ScheduleNextAfterActionAsync(
+        AttendanceActionType actionType,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken = default)
+    {
+        var plan =
+            await _planningService.PlanNextAsync(
+                utcNow,
+                cancellationToken,
+                actionType);
+
+        if (plan is null)
+        {
+            return null;
+        }
+
+        return await _reminderScheduler.ScheduleOneTimeAsync(
+            plan.TriggerAtUtc,
+            cancellationToken);
+    }}

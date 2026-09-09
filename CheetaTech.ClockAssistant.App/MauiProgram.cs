@@ -77,13 +77,13 @@ builder.Services.AddSingleton<
 #endif
         builder.Services.AddSingleton<CheetaTech.ClockAssistant.Core.Attendance.AttendanceSnoozePlanner>();
 
-        builder.Services.AddSingleton<CheetaTech.ClockAssistant.Core.Attendance.IAttendanceProviderExecutionGate>(
-            _ => new CheetaTech.ClockAssistant.Core.Attendance.ControlledDateAttendanceProviderExecutionGate(
-                new DateOnly(2026, 9, 9)));
+        builder.Services.AddSingleton<CheetaTech.ClockAssistant.Core.Attendance.IAttendanceProviderExecutionGate, CheetaTech.ClockAssistant.Core.Attendance.BasicAttendanceProviderExecutionGate>();
         builder.Services.AddSingleton<CheetaTech.ClockAssistant.Core.Attendance.IAttendanceActionExecutionService, CheetaTech.ClockAssistant.Core.Attendance.AttendanceActionExecutionService>();
 
         builder.Services.AddSingleton<CheetaTech.ClockAssistant.Core.Attendance.IAttendanceReminderPlanningService, CheetaTech.ClockAssistant.Core.Attendance.AttendanceReminderPlanningService>();
         builder.Services.AddSingleton<CheetaTech.ClockAssistant.App.Services.Notifications.IAttendanceReminderStartupCoordinator, CheetaTech.ClockAssistant.App.Services.Notifications.AttendanceReminderStartupCoordinator>();
+
+        builder.Services.AddSingleton<CheetaTech.ClockAssistant.App.Services.Diagnostics.IAttendanceActionAuditLog, CheetaTech.ClockAssistant.App.Services.Diagnostics.FileAttendanceActionAuditLog>();
 
         return builder.Build();
 	}

@@ -31,7 +31,8 @@ public sealed class AttendanceReminderPlanningService
 
     public async Task<AttendanceReminderPlan?> PlanNextAsync(
         DateTimeOffset utcNow,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        AttendanceActionType? skipActionType = null)
     {
         var configuration =
             await _configurationStore.GetAsync(cancellationToken);
@@ -68,6 +69,46 @@ public sealed class AttendanceReminderPlanningService
 
             foreach (var candidate in candidates)
             {
+                if (skipActionType == candidate.ActionType)
+                {
+                    continue;
+                }
+
+                // Stale current-day Clock In:
+                // once the configured Clock Out time has already passed, a new
+                // startup planning pass should not keep resurrecting today's
+                // missed Clock In. Clock Out remains eligible only when Phase 5
+                // has a successful Clock In record.
+                if (attendanceDate ==
+                        DateOnly.FromDateTime(
+                            localNow.DateTime.Date) &&
+                    candidate.ActionType ==
+                        AttendanceActionType.ClockIn &&
+                    configuration.ClockOutTime is not null &&
+                    TimeOnly.FromDateTime(
+                        localNow.DateTime) >=
+                        configuration.ClockOutTime.Value)
+                {
+                    continue;
+                }
+
+                // Stale current-day Clock Out:
+                // the reminder is valid during its configured lead window, but
+                // a fresh planning pass after ClockOutTime should move forward
+                // to the next eligible workday instead of resurrecting today's
+                // missed Clock Out reminder.
+                if (attendanceDate ==
+                        DateOnly.FromDateTime(
+                            localNow.DateTime.Date) &&
+                    candidate.ActionType ==
+                        AttendanceActionType.ClockOut &&
+                    configuration.ClockOutTime is not null &&
+                    TimeOnly.FromDateTime(
+                        localNow.DateTime) >=
+                        configuration.ClockOutTime.Value)
+                {
+                    continue;
+                }
                 var probeUtc =
                     candidate.TriggerAtUtc <= utcNow
                         ? utcNow

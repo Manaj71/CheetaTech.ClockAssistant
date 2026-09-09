@@ -1,4 +1,4 @@
-﻿using CheetaTech.ClockAssistant.Core.Configuration;
+using CheetaTech.ClockAssistant.Core.Configuration;
 
 namespace CheetaTech.ClockAssistant.Core.Attendance;
 
@@ -72,12 +72,15 @@ public sealed class AttendanceStateEvaluator
             currentRecord.ClockInState,
             clockInDue);
 
-        var clockOutDue = clockInState == AttendanceActionState.Succeeded &&
-                          IsNotificationWindowReached(
+        var clockOutReminderDue = IsNotificationWindowReached(
                               attendanceDate,
                               configuration.ClockOutTime.Value,
                               configuration.NotificationLeadTime,
                               localNow);
+
+        var clockOutDue =
+            clockInState == AttendanceActionState.Succeeded &&
+            clockOutReminderDue;
 
         var clockOutState = EvaluateActionState(
             currentRecord.ClockOutState,
@@ -92,8 +95,14 @@ public sealed class AttendanceStateEvaluator
             dayState,
             clockInState,
             clockOutState,
-            ClockInNotificationEligible: clockInState == AttendanceActionState.Due,
-            ClockOutNotificationEligible: clockOutState == AttendanceActionState.Due);
+            ClockInNotificationEligible:
+                clockInState == AttendanceActionState.Due &&
+                !clockOutReminderDue,
+            ClockOutNotificationEligible:
+                clockOutReminderDue &&
+                currentRecord.ClockOutState != AttendanceActionState.Succeeded &&
+                currentRecord.ClockOutState != AttendanceActionState.InProgress &&
+                currentRecord.ClockOutState != AttendanceActionState.Skipped);
     }
 
     private static AttendanceActionState EvaluateActionState(

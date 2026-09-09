@@ -102,9 +102,21 @@ public sealed class AttendanceActionExecutionService
                     evaluation.AttendanceDate);
             }
 
-            var credentials =
-                await _credentialStore.GetCredentialsAsync(
-                    cancellationToken);
+            StoredCredentials? credentials;
+
+            try
+            {
+                credentials =
+                    await _credentialStore.GetCredentialsAsync(
+                        cancellationToken);
+            }
+            catch
+            {
+                return Result(
+                    actionType,
+                    AttendanceActionExecutionStatus.CredentialReadFailed,
+                    evaluation.AttendanceDate);
+            }
 
             if (credentials is null)
             {
@@ -255,11 +267,11 @@ public sealed class AttendanceActionExecutionService
         return actionType switch
         {
             AttendanceActionType.ClockIn =>
-                evaluation.ClockInNotificationEligible &&
+                (evaluation.ClockInState == AttendanceActionState.Due) &&
                 evaluation.ClockInState == AttendanceActionState.Due,
 
             AttendanceActionType.ClockOut =>
-                evaluation.ClockOutNotificationEligible &&
+                (evaluation.ClockOutState == AttendanceActionState.Due) &&
                 evaluation.ClockOutState == AttendanceActionState.Due,
 
             _ => false

@@ -131,9 +131,13 @@ public sealed class AttendanceNotificationActionReceiver
                     services);
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Fail closed.
+            await HandleUnexpectedActionFailureAsync(
+                context,
+                notificationId,
+                requestedActionType,
+                ex);
         }
         finally
         {
@@ -141,6 +145,65 @@ public sealed class AttendanceNotificationActionReceiver
         }
     }
 
+    private static async Task HandleUnexpectedActionFailureAsync(
+        Context context,
+        int notificationId,
+        AttendanceActionType actionType,
+        Exception exception)
+    {
+        var services =
+            IPlatformApplication.Current?.Services;
+
+        var auditLog =
+            services?.GetService(
+                typeof(CheetaTech.ClockAssistant.App.Services.Diagnostics.IAttendanceActionAuditLog))
+                as CheetaTech.ClockAssistant.App.Services.Diagnostics.IAttendanceActionAuditLog;
+
+        if (auditLog is not null)
+        {
+            try
+            {
+                await auditLog.AppendExceptionAsync(
+                    actionType,
+                    DateTimeOffset.UtcNow,
+                    "NotificationActionReceiver",
+                    exception.GetType().Name);
+            }
+            catch
+            {
+                // Audit failure must not hide the user-facing failure result.
+            }
+        }
+
+        var reminderCoordinator =
+            services?.GetService(
+                typeof(IAttendanceReminderStartupCoordinator))
+                as IAttendanceReminderStartupCoordinator;
+
+        if (reminderCoordinator is not null)
+        {
+            try
+            {
+                await reminderCoordinator.ScheduleNextAfterActionAsync(
+                    actionType,
+                    DateTimeOffset.UtcNow);
+            }
+            catch
+            {
+                // The user-facing action failure must still be shown.
+            }
+        }
+        var actionName =
+            actionType == AttendanceActionType.ClockIn
+                ? "Clock In"
+                : "Clock Out";
+
+        ShowResultNotification(
+            context,
+            notificationId,
+            $"{actionName} needs attention",
+            "The action did not complete safely. Check UKG status before retrying.");
+    }
     private static async Task SnoozeAsync(
         Context context,
         int notificationId,
@@ -219,23 +282,40 @@ public sealed class AttendanceNotificationActionReceiver
             return;
         }
 
+        var auditLog =
+            services?.GetService(
+                typeof(CheetaTech.ClockAssistant.App.Services.Diagnostics.IAttendanceActionAuditLog))
+                as CheetaTech.ClockAssistant.App.Services.Diagnostics.IAttendanceActionAuditLog;
+
+        if (auditLog is not null)
+        {
+            await auditLog.AppendReceivedAsync(
+                actionType,
+                utcNow);
+        }
+
         var result =
             await executionService.ExecuteAsync(
                 actionType,
                 utcNow);
 
-        if (ShouldRearmNextReminder(result.Status))
+        if (auditLog is not null)
         {
-            var reminderCoordinator =
-                services?.GetService(
-                    typeof(IAttendanceReminderStartupCoordinator))
-                    as IAttendanceReminderStartupCoordinator;
+            await auditLog.AppendResultAsync(
+                result,
+                DateTimeOffset.UtcNow);
+        }
 
-            if (reminderCoordinator is not null)
-            {
-                await reminderCoordinator.ScheduleNextAsync(
-                    DateTimeOffset.UtcNow);
-            }
+        var reminderCoordinator =
+            services?.GetService(
+                typeof(IAttendanceReminderStartupCoordinator))
+                as IAttendanceReminderStartupCoordinator;
+
+        if (reminderCoordinator is not null)
+        {
+            await reminderCoordinator.ScheduleNextAfterActionAsync(
+                actionType,
+                DateTimeOffset.UtcNow);
         }
 
         var actionName =
@@ -283,6 +363,11 @@ public sealed class AttendanceNotificationActionReceiver
                         "The provider may have confirmed the action, but local state was not saved. Do not retry."
                     ),
 
+                AttendanceActionExecutionStatus.CredentialReadFailed =>
+                    (
+                        $"{actionName} unavailable",
+                        "Stored credentials could not be read. Open Clock Assistant and update credentials."
+                    ),
                 AttendanceActionExecutionStatus.MissingCredentials =>
                     (
                         $"{actionName} unavailable",
@@ -315,13 +400,7 @@ public sealed class AttendanceNotificationActionReceiver
             message);
     }
 
-    private static bool ShouldRearmNextReminder(
-        AttendanceActionExecutionStatus status)
-    {
-        return status is
-            AttendanceActionExecutionStatus.Succeeded
-            or AttendanceActionExecutionStatus.NotEligible;
-    }
+
     private static void ShowResultNotification(
         Context context,
         int notificationId,

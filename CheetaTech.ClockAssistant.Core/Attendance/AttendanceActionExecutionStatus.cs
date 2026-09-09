@@ -10,5 +10,5 @@ public enum AttendanceActionExecutionStatus
     ProviderRejected = 5,
     ProviderUnknown = 6,
     PersistenceFailed = 7,
-    ExecutionDisabled = 8
-}
+    ExecutionDisabled = 8,
+    CredentialReadFailed = 9}

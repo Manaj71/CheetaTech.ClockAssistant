@@ -4,5 +4,6 @@ public interface IAttendanceReminderPlanningService
 {
     Task<AttendanceReminderPlan?> PlanNextAsync(
         DateTimeOffset utcNow,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        AttendanceActionType? skipActionType = null);
 }
