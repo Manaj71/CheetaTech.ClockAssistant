@@ -1,4 +1,4 @@
-﻿using CheetaTech.ClockAssistant.Core.Attendance;
+using CheetaTech.ClockAssistant.Core.Attendance;
 using CheetaTech.ClockAssistant.Core.Configuration;
 
 namespace CheetaTech.ClockAssistant.Tests;
@@ -74,7 +74,7 @@ public sealed class AttendanceStateEvaluatorTests
     }
 
     [Fact]
-    public void Evaluate_ClockOutTimeReachedWithoutClockInSuccess_DoesNotAllowClockOut()
+    public void Evaluate_ClockOutTimeReachedWithoutClockInSuccess_NotifiesButDoesNotAllowClockOut()
     {
         var configuration = CreateConfiguration();
         var utcNow = new DateTimeOffset(2026, 9, 7, 20, 0, 0, TimeSpan.Zero);
@@ -82,7 +82,7 @@ public sealed class AttendanceStateEvaluatorTests
         var result = Evaluator.Evaluate(configuration, utcNow);
 
         Assert.NotEqual(AttendanceActionState.Due, result.ClockOutState);
-        Assert.False(result.ClockOutNotificationEligible);
+        Assert.True(result.ClockOutNotificationEligible);
     }
 
     [Fact]

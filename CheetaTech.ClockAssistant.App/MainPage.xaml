@@ -4,13 +4,6 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
     x:Class="CheetaTech.ClockAssistant.App.MainPage"
     Title="Clock Assistant">
-    <ContentPage.ToolbarItems>
-        <ToolbarItem
-            Text="Schedule 5-Min Reminder"
-            Order="Primary"
-            Priority="0"
-            Clicked="OnTestNotificationClicked" />
-    </ContentPage.ToolbarItems>
 
     <ScrollView>
         <VerticalStackLayout

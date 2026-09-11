@@ -116,7 +116,7 @@ public sealed class AndroidLocalNotificationService : ILocalNotificationService
             snoozeIntent,
             GetActionPendingIntentFlags())
             ?? throw new InvalidOperationException(
-                "Snooze Test pending intent could not be created.");
+                "Snooze pending intent could not be created.");
 
         var actionIntent = new Intent(
             appContext,
@@ -136,7 +136,7 @@ public sealed class AndroidLocalNotificationService : ILocalNotificationService
             actionIntent,
             GetActionPendingIntentFlags())
             ?? throw new InvalidOperationException(
-                "Action Test pending intent could not be created.");
+                "Attendance action pending intent could not be created.");
 
         var snoozeActionBuilder =
             new NotificationCompat.Action.Builder(
@@ -149,7 +149,7 @@ public sealed class AndroidLocalNotificationService : ILocalNotificationService
 
         var snoozeAction = snoozeActionBuilder.Build()
             ?? throw new InvalidOperationException(
-                "Snooze Test notification action could not be created.");
+                "Snooze notification action could not be created.");
 
         var localActionBuilder =
             new NotificationCompat.Action.Builder(
@@ -162,7 +162,7 @@ public sealed class AndroidLocalNotificationService : ILocalNotificationService
 
         var localAction = localActionBuilder.Build()
             ?? throw new InvalidOperationException(
-                "Action Test notification action could not be created.");
+                "Attendance notification action could not be created.");
 
         builder.AddAction(snoozeAction);
         builder.AddAction(localAction);
