@@ -7,6 +7,7 @@ public partial class AppShell : Shell
     private readonly ISetupReadinessService _setupReadinessService;
     private readonly SetupPage _setupPage;
     private readonly MainPage _mainPage;
+    private readonly HistoryPage _historyPage;
     private readonly SettingsPage _settingsPage;
     private bool _startupRouteResolved;
 
@@ -14,6 +15,7 @@ public partial class AppShell : Shell
         ISetupReadinessService setupReadinessService,
         SetupPage setupPage,
         MainPage mainPage,
+        HistoryPage historyPage,
         SettingsPage settingsPage)
     {
         InitializeComponent();
@@ -32,6 +34,11 @@ public partial class AppShell : Shell
             mainPage
             ?? throw new ArgumentNullException(
                 nameof(mainPage));
+
+        _historyPage =
+            historyPage
+            ?? throw new ArgumentNullException(
+                nameof(historyPage));
 
         _settingsPage =
             settingsPage
@@ -116,6 +123,21 @@ public partial class AppShell : Shell
                 Content = _mainPage
             });
 
+        var historyItem =
+            new FlyoutItem
+            {
+                Title = "History",
+                Route = "History"
+            };
+
+        historyItem.Items.Add(
+            new ShellContent
+            {
+                Title = "History",
+                Route = "HistoryPage",
+                Content = _historyPage
+            });
+
         var settingsItem =
             new FlyoutItem
             {
@@ -132,6 +154,7 @@ public partial class AppShell : Shell
             });
 
         Items.Add(homeItem);
+        Items.Add(historyItem);
         Items.Add(settingsItem);
 
         CurrentItem = homeItem;

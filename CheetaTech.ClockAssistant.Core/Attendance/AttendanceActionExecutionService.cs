@@ -48,9 +48,22 @@ public sealed class AttendanceActionExecutionService
             ?? throw new ArgumentNullException(nameof(providerExecutionGate));
     }
 
+    public Task<AttendanceActionExecutionResult> ExecuteAsync(
+        AttendanceActionType actionType,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken = default)
+    {
+        return ExecuteAsync(
+            actionType,
+            utcNow,
+            AttendanceActionExecutionMode.Notification,
+            cancellationToken);
+    }
+
     public async Task<AttendanceActionExecutionResult> ExecuteAsync(
         AttendanceActionType actionType,
         DateTimeOffset utcNow,
+        AttendanceActionExecutionMode executionMode,
         CancellationToken cancellationToken = default)
     {
         await _executionGate.WaitAsync(cancellationToken);
@@ -83,7 +96,10 @@ public sealed class AttendanceActionExecutionService
                     utcNow,
                     currentRecord);
 
-            if (!IsEligible(evaluation, actionType))
+            if (!IsEligible(
+                    evaluation,
+                    actionType,
+                    executionMode))
             {
                 return Result(
                     actionType,
@@ -262,17 +278,61 @@ public sealed class AttendanceActionExecutionService
 
     private static bool IsEligible(
         AttendanceStateEvaluation evaluation,
+        AttendanceActionType actionType,
+        AttendanceActionExecutionMode executionMode)
+    {
+        return executionMode switch
+        {
+            AttendanceActionExecutionMode.Notification =>
+                IsNotificationEligible(
+                    evaluation,
+                    actionType),
+
+            AttendanceActionExecutionMode.Manual =>
+                IsManualEligible(
+                    evaluation,
+                    actionType),
+
+            _ => false
+        };
+    }
+
+    private static bool IsNotificationEligible(
+        AttendanceStateEvaluation evaluation,
         AttendanceActionType actionType)
     {
         return actionType switch
         {
             AttendanceActionType.ClockIn =>
-                (evaluation.ClockInState == AttendanceActionState.Due) &&
                 evaluation.ClockInState == AttendanceActionState.Due,
 
             AttendanceActionType.ClockOut =>
-                (evaluation.ClockOutState == AttendanceActionState.Due) &&
                 evaluation.ClockOutState == AttendanceActionState.Due,
+
+            _ => false
+        };
+    }
+
+    private static bool IsManualEligible(
+        AttendanceStateEvaluation evaluation,
+        AttendanceActionType actionType)
+    {
+        if (evaluation.DayState == AttendanceDayState.NotScheduled ||
+            evaluation.DayState == AttendanceDayState.Error)
+        {
+            return false;
+        }
+
+        return actionType switch
+        {
+            AttendanceActionType.ClockIn =>
+                evaluation.ClockInState is AttendanceActionState.NotDue
+                    or AttendanceActionState.Due,
+
+            AttendanceActionType.ClockOut =>
+                evaluation.ClockInState == AttendanceActionState.Succeeded &&
+                evaluation.ClockOutState is AttendanceActionState.NotDue
+                    or AttendanceActionState.Due,
 
             _ => false
         };

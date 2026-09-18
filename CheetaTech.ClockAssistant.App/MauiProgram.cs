@@ -1,7 +1,9 @@
 using CheetaTech.ClockAssistant.App.Services.Security;
 using CheetaTech.ClockAssistant.App.Services.Credentials;
 using CheetaTech.ClockAssistant.App.Services.Configuration;
+using CheetaTech.ClockAssistant.Core.Attendance;
 using CheetaTech.ClockAssistant.Core.Configuration;
+using CheetaTech.ClockAssistant.Core.History;
 using CheetaTech.ClockAssistant.Core.Security;
 using CheetaTech.ClockAssistant.Core.Providers;
 using CheetaTech.ClockAssistant.Providers.UKG;
@@ -36,15 +38,16 @@ public static class MauiProgram
 		builder.Services.AddTransient<SetupPage>();
 		builder.Services.AddTransient<MainPage>();
 		builder.Services.AddTransient<SettingsPage>();
+		builder.Services.AddTransient<HistoryPage>();
 
 #if ANDROID
 builder.Services.AddSingleton<
-    CheetaTech.ClockAssistant.App.Services.Security.IDeviceAuthenticationService,
-    CheetaTech.ClockAssistant.App.Services.Security.AndroidDeviceAuthenticationService>();
+	CheetaTech.ClockAssistant.App.Services.Security.IDeviceAuthenticationService,
+	CheetaTech.ClockAssistant.App.Services.Security.AndroidDeviceAuthenticationService>();
 #else
 builder.Services.AddSingleton<
-    CheetaTech.ClockAssistant.App.Services.Security.IDeviceAuthenticationService,
-    CheetaTech.ClockAssistant.App.Services.Security.UnavailableDeviceAuthenticationService>();
+	CheetaTech.ClockAssistant.App.Services.Security.IDeviceAuthenticationService,
+	CheetaTech.ClockAssistant.App.Services.Security.UnavailableDeviceAuthenticationService>();
 #endif
 		builder.Services.AddTransient<AppShell>();
 		builder
@@ -80,11 +83,18 @@ builder.Services.AddSingleton<
         builder.Services.AddSingleton<CheetaTech.ClockAssistant.Core.Attendance.IAttendanceProviderExecutionGate, CheetaTech.ClockAssistant.Core.Attendance.BasicAttendanceProviderExecutionGate>();
         builder.Services.AddSingleton<CheetaTech.ClockAssistant.Core.Attendance.IAttendanceActionExecutionService, CheetaTech.ClockAssistant.Core.Attendance.AttendanceActionExecutionService>();
 
+        builder.Services.AddSingleton<IAttendanceHistoryStore>(
+            _ => new FileAttendanceHistoryStore(
+                Path.Combine(
+                    Microsoft.Maui.Storage.FileSystem.AppDataDirectory,
+                    "attendance-history-v1.json")));
+        builder.Services.AddSingleton<AttendanceHistoryRecorder>();
+
         builder.Services.AddSingleton<CheetaTech.ClockAssistant.Core.Attendance.IAttendanceReminderPlanningService, CheetaTech.ClockAssistant.Core.Attendance.AttendanceReminderPlanningService>();
         builder.Services.AddSingleton<CheetaTech.ClockAssistant.App.Services.Notifications.IAttendanceReminderStartupCoordinator, CheetaTech.ClockAssistant.App.Services.Notifications.AttendanceReminderStartupCoordinator>();
 
         builder.Services.AddSingleton<CheetaTech.ClockAssistant.App.Services.Diagnostics.IAttendanceActionAuditLog, CheetaTech.ClockAssistant.App.Services.Diagnostics.FileAttendanceActionAuditLog>();
 
-        return builder.Build();
+		return builder.Build();
 	}
 }

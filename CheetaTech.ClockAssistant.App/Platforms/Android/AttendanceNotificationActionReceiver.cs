@@ -4,6 +4,7 @@ using AndroidX.Core.App;
 using CheetaTech.ClockAssistant.App.Services.Notifications;
 using CheetaTech.ClockAssistant.Core.Attendance;
 using CheetaTech.ClockAssistant.Core.Configuration;
+using CheetaTech.ClockAssistant.Core.History;
 using Microsoft.Maui;
 
 namespace CheetaTech.ClockAssistant.App.Platforms.Android;
@@ -366,18 +367,18 @@ public sealed class AttendanceNotificationActionReceiver
                 AttendanceActionExecutionStatus.CredentialReadFailed =>
                     (
                         $"{actionName} unavailable",
-                        "Stored credentials could not be read. Open Clock Assistant and update credentials."
+                        "Stored credentials could not be read. Open ShiftPilot and update credentials."
                     ),
                 AttendanceActionExecutionStatus.MissingCredentials =>
                     (
                         $"{actionName} unavailable",
-                        "Stored credentials are unavailable. Open Clock Assistant."
+                        "Stored credentials are unavailable. Open ShiftPilot."
                     ),
 
                 AttendanceActionExecutionStatus.MissingConfiguration =>
                     (
                         $"{actionName} unavailable",
-                        "Attendance configuration is unavailable. Open Clock Assistant."
+                        "Attendance configuration is unavailable. Open ShiftPilot."
                     ),
 
                 AttendanceActionExecutionStatus.ProviderResolutionFailed =>
@@ -398,6 +399,27 @@ public sealed class AttendanceNotificationActionReceiver
             notificationId,
             title,
             message);
+
+
+        try
+        {
+            var historyRecorder =
+                services?.GetService(
+                    typeof(AttendanceHistoryRecorder))
+                    as AttendanceHistoryRecorder;
+
+            if (historyRecorder is not null)
+            {
+                await historyRecorder.TryRecordAsync(
+                    result,
+                    utcNow);
+            }
+        }
+        catch
+        {
+            // History must never alter attendance behavior.
+        }
+
     }
 
 

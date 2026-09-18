@@ -134,6 +134,22 @@
                 Keyboard="Numeric"
                 Placeholder="15" />
 
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                <VerticalStackLayout Grid.Column="0" Spacing="2">
+                    <Label Text="High-visibility reminders" FontAttributes="Bold" />
+                    <Label
+                        Text="Keep attendance reminders prominent until you handle them, where Android allows."
+                        FontSize="12"
+                        Opacity="0.75" />
+                </VerticalStackLayout>
+                <Switch
+                    x:Name="HighVisibilityRemindersSwitch"
+                    Grid.Column="1"
+                    IsToggled="True"
+                    VerticalOptions="Center"
+                    AutomationId="HighVisibilityReminders" />
+            </Grid>
+
             <Label Text="Execution mode" FontAttributes="Bold" />
             <Picker
                 x:Name="ExecutionModePicker"

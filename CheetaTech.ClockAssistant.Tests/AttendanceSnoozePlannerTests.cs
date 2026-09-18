@@ -6,57 +6,194 @@ namespace CheetaTech.ClockAssistant.Tests;
 public sealed class AttendanceSnoozePlannerTests
 {
     [Fact]
-    public void ClockIn_AtLeadStart_SnoozesToClockInTime()
+    public void ClockIn_AtLeadStart_SnoozesTwoMinutesBeforeClockInTime()
     {
-        var result = new AttendanceSnoozePlanner().Plan(
-            Configuration(),
-            AttendanceActionType.ClockIn,
-            new DateTimeOffset(2026, 9, 8, 10, 45, 0, TimeSpan.Zero));
+        var result =
+            new AttendanceSnoozePlanner().Plan(
+                Configuration(),
+                AttendanceActionType.ClockIn,
+                new DateTimeOffset(
+                    2026,
+                    9,
+                    8,
+                    10,
+                    45,
+                    0,
+                    TimeSpan.Zero));
 
         Assert.NotNull(result);
+
         Assert.Equal(
-            new DateTimeOffset(2026, 9, 8, 11, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(
+                2026,
+                9,
+                8,
+                10,
+                58,
+                0,
+                TimeSpan.Zero),
             result.TriggerAtUtc);
+
         Assert.Equal(
             TimeSpan.FromMinutes(15),
             result.RemainingUntilScheduledAction);
     }
 
     [Fact]
-    public void ClockIn_LaterTap_UsesOnlyTimeStillRemaining()
+    public void ClockIn_LaterTap_UsesProtectedTriggerAndActualRemainingTime()
     {
-        var result = new AttendanceSnoozePlanner().Plan(
-            Configuration(),
-            AttendanceActionType.ClockIn,
-            new DateTimeOffset(2026, 9, 8, 10, 55, 0, TimeSpan.Zero));
+        var result =
+            new AttendanceSnoozePlanner().Plan(
+                Configuration(),
+                AttendanceActionType.ClockIn,
+                new DateTimeOffset(
+                    2026,
+                    9,
+                    8,
+                    10,
+                    55,
+                    0,
+                    TimeSpan.Zero));
 
         Assert.NotNull(result);
+
+        Assert.Equal(
+            new DateTimeOffset(
+                2026,
+                9,
+                8,
+                10,
+                58,
+                0,
+                TimeSpan.Zero),
+            result.TriggerAtUtc);
+
         Assert.Equal(
             TimeSpan.FromMinutes(5),
             result.RemainingUntilScheduledAction);
     }
 
     [Fact]
-    public void ClockOut_SnoozesToConfiguredClockOutTime()
+    public void ClockOut_SnoozesTwoMinutesBeforeConfiguredClockOutTime()
     {
-        var result = new AttendanceSnoozePlanner().Plan(
-            Configuration(),
-            AttendanceActionType.ClockOut,
-            new DateTimeOffset(2026, 9, 8, 19, 20, 0, TimeSpan.Zero));
+        var result =
+            new AttendanceSnoozePlanner().Plan(
+                Configuration(),
+                AttendanceActionType.ClockOut,
+                new DateTimeOffset(
+                    2026,
+                    9,
+                    8,
+                    19,
+                    20,
+                    0,
+                    TimeSpan.Zero));
 
         Assert.NotNull(result);
+
         Assert.Equal(
-            new DateTimeOffset(2026, 9, 8, 19, 30, 0, TimeSpan.Zero),
+            new DateTimeOffset(
+                2026,
+                9,
+                8,
+                19,
+                28,
+                0,
+                TimeSpan.Zero),
             result.TriggerAtUtc);
+
+        Assert.Equal(
+            TimeSpan.FromMinutes(10),
+            result.RemainingUntilScheduledAction);
+    }
+
+    [Fact]
+    public void SnoozeBeforeProtectedTrigger_ReturnsProtectedTrigger()
+    {
+        var result =
+            new AttendanceSnoozePlanner().Plan(
+                Configuration(),
+                AttendanceActionType.ClockOut,
+                new DateTimeOffset(
+                    2026,
+                    9,
+                    8,
+                    19,
+                    27,
+                    0,
+                    TimeSpan.Zero));
+
+        Assert.NotNull(result);
+
+        Assert.Equal(
+            new DateTimeOffset(
+                2026,
+                9,
+                8,
+                19,
+                28,
+                0,
+                TimeSpan.Zero),
+            result.TriggerAtUtc);
+
+        Assert.Equal(
+            TimeSpan.FromMinutes(3),
+            result.RemainingUntilScheduledAction);
+    }
+
+    [Fact]
+    public void ProtectedTriggerReached_SnoozeIsBlocked()
+    {
+        var result =
+            new AttendanceSnoozePlanner().Plan(
+                Configuration(),
+                AttendanceActionType.ClockOut,
+                new DateTimeOffset(
+                    2026,
+                    9,
+                    8,
+                    19,
+                    28,
+                    0,
+                    TimeSpan.Zero));
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void AfterProtectedTriggerBeforeScheduledTime_SnoozeIsBlocked()
+    {
+        var result =
+            new AttendanceSnoozePlanner().Plan(
+                Configuration(),
+                AttendanceActionType.ClockOut,
+                new DateTimeOffset(
+                    2026,
+                    9,
+                    8,
+                    19,
+                    29,
+                    0,
+                    TimeSpan.Zero));
+
+        Assert.Null(result);
     }
 
     [Fact]
     public void ScheduledTimeReached_SnoozeIsBlocked()
     {
-        var result = new AttendanceSnoozePlanner().Plan(
-            Configuration(),
-            AttendanceActionType.ClockIn,
-            new DateTimeOffset(2026, 9, 8, 11, 0, 0, TimeSpan.Zero));
+        var result =
+            new AttendanceSnoozePlanner().Plan(
+                Configuration(),
+                AttendanceActionType.ClockIn,
+                new DateTimeOffset(
+                    2026,
+                    9,
+                    8,
+                    11,
+                    0,
+                    0,
+                    TimeSpan.Zero));
 
         Assert.Null(result);
     }
@@ -64,14 +201,18 @@ public sealed class AttendanceSnoozePlannerTests
     private static ClockAssistantConfiguration Configuration()
         => new()
         {
-            WorkDays = new[] {
-                DayOfWeek.Monday, DayOfWeek.Tuesday,
-                DayOfWeek.Wednesday, DayOfWeek.Thursday,
+            WorkDays =
+            [
+                DayOfWeek.Monday,
+                DayOfWeek.Tuesday,
+                DayOfWeek.Wednesday,
+                DayOfWeek.Thursday,
                 DayOfWeek.Friday
-            },
+            ],
             ClockInTime = new TimeOnly(7, 0),
             ClockOutTime = new TimeOnly(15, 30),
             TimeZoneId = "America/Toronto",
-            NotificationLeadTime = TimeSpan.FromMinutes(15)
+            NotificationLeadTime =
+                TimeSpan.FromMinutes(15)
         };
 }

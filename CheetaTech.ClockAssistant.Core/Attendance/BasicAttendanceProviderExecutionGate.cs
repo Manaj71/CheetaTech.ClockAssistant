@@ -3,10 +3,10 @@ namespace CheetaTech.ClockAssistant.Core.Attendance;
 /// <summary>
 /// Basic-mode provider execution gate.
 ///
-/// AttendanceActionExecutionService performs the authoritative Phase 5
-/// workday/due/duplicate checks before calling this gate. Reaching this gate
-/// means the user has explicitly pressed the Clock In or Clock Out notification
-/// action and the action is still eligible.
+/// AttendanceActionExecutionService performs the authoritative workday,
+/// eligibility, and duplicate checks before calling this gate. Reaching this
+/// gate means the requested Clock In or Clock Out action is still eligible for
+/// provider execution.
 /// </summary>
 public sealed class BasicAttendanceProviderExecutionGate
     : IAttendanceProviderExecutionGate

@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    x:Class="CheetaTech.ClockAssistant.App.HistoryPage"
+    Title="History">
+
+    <Grid
+        Padding="24"
+        RowDefinitions="Auto,Auto,*,Auto"
+        MaximumWidthRequest="620"
+        HorizontalOptions="Center">
+
+        <VerticalStackLayout
+            Grid.Row="0"
+            Spacing="4">
+            <Label
+                Text="History"
+                FontSize="28"
+                FontAttributes="Bold"
+                SemanticProperties.HeadingLevel="Level1" />
+            <Label
+                Text="Last 30 days • stored on this device"
+                LineBreakMode="WordWrap" />
+        </VerticalStackLayout>
+
+        <Label
+            x:Name="ErrorLabel"
+            Grid.Row="1"
+            IsVisible="False"
+            FontAttributes="Bold"
+            LineBreakMode="WordWrap"
+            Margin="0,12,0,0" />
+
+        <CollectionView
+            x:Name="HistoryCollectionView"
+            Grid.Row="2"
+            IsVisible="False"
+            IsGrouped="True"
+            Margin="0,16,0,0">
+            <CollectionView.GroupHeaderTemplate>
+                <DataTemplate>
+                    <Border
+                        StrokeThickness="1"
+                        Padding="10"
+                        Margin="0,12,0,6">
+                        <Label
+                            Text="{Binding DateLabel}"
+                            FontAttributes="Bold" />
+                    </Border>
+                </DataTemplate>
+            </CollectionView.GroupHeaderTemplate>
+
+            <CollectionView.ItemTemplate>
+                <DataTemplate>
+                    <Border
+                        StrokeThickness="1"
+                        Padding="12"
+                        Margin="0,0,0,8">
+                        <VerticalStackLayout Spacing="4">
+                            <Label
+                                Text="{Binding ActionLabel}"
+                                FontAttributes="Bold" />
+                            <Label Text="{Binding TimeLabel}" />
+                            <Label Text="{Binding OutcomeLabel}" />
+                        </VerticalStackLayout>
+                    </Border>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+
+        <VerticalStackLayout
+            x:Name="EmptyStatePanel"
+            Grid.Row="2"
+            IsVisible="False"
+            Spacing="6"
+            Margin="0,24,0,0">
+            <Label
+                Text="No attendance history yet."
+                FontAttributes="Bold" />
+            <Label
+                Text="Clock In and Clock Out activity will appear here."
+                LineBreakMode="WordWrap" />
+        </VerticalStackLayout>
+    </Grid>
+</ContentPage>

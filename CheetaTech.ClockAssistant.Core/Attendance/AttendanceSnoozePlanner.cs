@@ -4,6 +4,9 @@ namespace CheetaTech.ClockAssistant.Core.Attendance;
 
 public sealed class AttendanceSnoozePlanner
 {
+    private static readonly TimeSpan SnoozeSafetyLead =
+        TimeSpan.FromMinutes(2);
+
     public AttendanceSnoozePlan? Plan(
         ClockAssistantConfiguration configuration,
         AttendanceActionType actionType,
@@ -20,8 +23,12 @@ public sealed class AttendanceSnoozePlanner
 
         var scheduledTime = actionType switch
         {
-            AttendanceActionType.ClockIn => configuration.ClockInTime,
-            AttendanceActionType.ClockOut => configuration.ClockOutTime,
+            AttendanceActionType.ClockIn =>
+                configuration.ClockInTime,
+
+            AttendanceActionType.ClockOut =>
+                configuration.ClockOutTime,
+
             _ => null
         };
 
@@ -30,13 +37,22 @@ public sealed class AttendanceSnoozePlanner
             return null;
         }
 
-        var timeZone = ResolveTimeZone(configuration.TimeZoneId);
-        var localNow = TimeZoneInfo.ConvertTime(utcNow, timeZone);
-        var attendanceDate = DateOnly.FromDateTime(localNow.DateTime);
+        var timeZone =
+            ResolveTimeZone(configuration.TimeZoneId);
 
-        var scheduledLocal = attendanceDate.ToDateTime(
-            scheduledTime.Value,
-            DateTimeKind.Unspecified);
+        var localNow =
+            TimeZoneInfo.ConvertTime(
+                utcNow,
+                timeZone);
+
+        var attendanceDate =
+            DateOnly.FromDateTime(
+                localNow.DateTime);
+
+        var scheduledLocal =
+            attendanceDate.ToDateTime(
+                scheduledTime.Value,
+                DateTimeKind.Unspecified);
 
         if (scheduledLocal <= localNow.DateTime ||
             timeZone.IsInvalidTime(scheduledLocal))
@@ -44,29 +60,46 @@ public sealed class AttendanceSnoozePlanner
             return null;
         }
 
-        var scheduledUtc = TimeZoneInfo.ConvertTimeToUtc(
-            scheduledLocal,
-            timeZone);
+        var scheduledUtc =
+            TimeZoneInfo.ConvertTimeToUtc(
+                scheduledLocal,
+                timeZone);
 
-        var triggerAtUtc = new DateTimeOffset(
-            scheduledUtc,
-            TimeSpan.Zero);
+        var scheduledAtUtc =
+            new DateTimeOffset(
+                scheduledUtc,
+                TimeSpan.Zero);
 
-        var remaining = triggerAtUtc - utcNow;
+        var remainingUntilScheduledAction =
+            scheduledAtUtc - utcNow;
 
-        return remaining > TimeSpan.Zero
-            ? new AttendanceSnoozePlan(
-                actionType,
-                triggerAtUtc,
-                remaining)
-            : null;
+        if (remainingUntilScheduledAction <=
+            TimeSpan.Zero)
+        {
+            return null;
+        }
+
+        var triggerAtUtc =
+            scheduledAtUtc - SnoozeSafetyLead;
+
+        if (triggerAtUtc <= utcNow)
+        {
+            return null;
+        }
+
+        return new AttendanceSnoozePlan(
+            actionType,
+            triggerAtUtc,
+            remainingUntilScheduledAction);
     }
 
-    private static TimeZoneInfo ResolveTimeZone(string timeZoneId)
+    private static TimeZoneInfo ResolveTimeZone(
+        string timeZoneId)
     {
         try
         {
-            return TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+            return TimeZoneInfo.FindSystemTimeZoneById(
+                timeZoneId);
         }
         catch (TimeZoneNotFoundException)
         {

@@ -86,6 +86,24 @@ public sealed class AndroidLocalNotificationService : ILocalNotificationService
             ?? throw new InvalidOperationException(
                 "MAUI Android application context is unavailable.");
 
+        var services =
+            Microsoft.Maui.IPlatformApplication.Current?.Services;
+
+        var configurationStore =
+            services?.GetService(
+                typeof(CheetaTech.ClockAssistant.Core.Configuration.IClockAssistantConfigurationStore))
+                as CheetaTech.ClockAssistant.Core.Configuration.IClockAssistantConfigurationStore;
+
+        var configuration =
+            configurationStore is null
+                ? null
+                : await configurationStore
+                    .GetAsync()
+                    .ConfigureAwait(false);
+
+        var highVisibilityReminders =
+            configuration?.HighVisibilityReminders ?? true;
+
         var builder = new NotificationCompat.Builder(
             appContext,
             ChannelId);
@@ -96,7 +114,16 @@ public sealed class AndroidLocalNotificationService : ILocalNotificationService
             global::CheetaTech.ClockAssistant.App.Resource.Drawable.notification_small_icon);
         builder.SetPriority((int)NotificationPriority.High);
         builder.SetVisibility(NotificationCompat.VisibilityPublic);
-        builder.SetAutoCancel(true);
+        if (highVisibilityReminders)
+        {
+            builder.SetAutoCancel(false);
+            builder.SetOngoing(true);
+        }
+        else
+        {
+            builder.SetAutoCancel(true);
+            builder.SetOngoing(false);
+        }
 
         var snoozeIntent = new Intent(
             appContext,

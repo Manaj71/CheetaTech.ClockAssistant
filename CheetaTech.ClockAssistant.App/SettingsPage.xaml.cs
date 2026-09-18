@@ -200,6 +200,9 @@ public partial class SettingsPage : ContentPage
                 ((int)configuration.NotificationLeadTime.TotalMinutes)
                 .ToString();
 
+            HighVisibilityRemindersSwitch.IsToggled =
+                configuration.HighVisibilityReminders;
+
             var executionModeName =
                 configuration.ExecutionMode.ToString();
 
@@ -378,6 +381,8 @@ public partial class SettingsPage : ContentPage
                     TimeZoneId = timeZoneId,
                     NotificationLeadTime =
                         TimeSpan.FromMinutes(notificationLeadMinutes),
+                    HighVisibilityReminders =
+                        HighVisibilityRemindersSwitch.IsToggled,
                     ExecutionMode = executionMode
                 };
 

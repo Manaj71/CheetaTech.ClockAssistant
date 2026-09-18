@@ -3,7 +3,7 @@
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
     x:Class="CheetaTech.ClockAssistant.App.MainPage"
-    Title="Clock Assistant">
+    Title="ShiftPilot">
 
     <ScrollView>
         <VerticalStackLayout
@@ -13,29 +13,69 @@
             HorizontalOptions="Center">
 
             <Label
-                Text="CheetaTech Clock Assistant"
+                Text="ShiftPilot"
                 FontSize="28"
-                FontAttributes="Bold"
-                SemanticProperties.HeadingLevel="Level1" />
+                FontAttributes="Bold" />
 
             <Label
-                Text="Status"
+                Text="Current Shift"
                 FontSize="20"
-                FontAttributes="Bold"
-                SemanticProperties.HeadingLevel="Level2" />
+                FontAttributes="Bold" />
 
             <Border
                 Padding="12"
                 StrokeThickness="1">
                 <VerticalStackLayout Spacing="6">
                     <Label
-                        Text="Configuration is available."
+                        Text="Clock In"
+                        FontSize="18"
                         FontAttributes="Bold" />
                     <Label
-                        Text="This is the normal Main/status foundation. Attendance state, next scheduled action, notifications, history, and Advanced status will be added in their dedicated phases."
+                        x:Name="ClockInStatusValue"
+                        FontAttributes="Bold"
+                        LineBreakMode="WordWrap" />
+                    <Label
+                        x:Name="ClockInTimeValue"
+                        FontSize="12"
+                        Opacity="0.8"
                         LineBreakMode="WordWrap" />
                 </VerticalStackLayout>
             </Border>
+
+            <Border
+                Padding="12"
+                StrokeThickness="1">
+                <VerticalStackLayout Spacing="6">
+                    <Label
+                        Text="Clock Out"
+                        FontSize="18"
+                        FontAttributes="Bold" />
+                    <Label
+                        x:Name="ClockOutStatusValue"
+                        FontAttributes="Bold"
+                        LineBreakMode="WordWrap" />
+                    <Label
+                        x:Name="ClockOutTimeValue"
+                        FontSize="12"
+                        Opacity="0.8"
+                        LineBreakMode="WordWrap" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Label
+                x:Name="SummaryLabel"
+                FontAttributes="Bold"
+                LineBreakMode="WordWrap" />
+
+            <Label
+                x:Name="ResultLabel"
+                IsVisible="False"
+                LineBreakMode="WordWrap" />
+
+            <Button
+                x:Name="ActionButton"
+                IsVisible="False"
+                Text="Clock In" />
 
         </VerticalStackLayout>
     </ScrollView>

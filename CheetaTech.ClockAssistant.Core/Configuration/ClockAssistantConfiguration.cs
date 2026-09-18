@@ -16,6 +16,12 @@ public sealed record ClockAssistantConfiguration
     public string TimeZoneId { get; init; } = string.Empty;
 
     public TimeSpan NotificationLeadTime { get; init; }
+    /// <summary>
+    /// When true, supported platforms should keep attendance reminders
+    /// prominent until the user handles them. Platform/OEM presentation
+    /// remains authoritative.
+    /// </summary>
+    public bool HighVisibilityReminders { get; init; } = true;
 
     /// <summary>
     /// Requested operating mode from configuration.
