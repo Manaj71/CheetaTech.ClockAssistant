@@ -18,4 +18,7 @@ public sealed class UnavailableLocalNotificationService
         string message,
         AttendanceActionType actionType)
         => Task.FromResult(false);
+
+    public Task CancelAsync(int notificationId)
+        => Task.CompletedTask;
 }

@@ -525,8 +525,219 @@ public sealed class AttendanceActionExecutionServiceTests
         Assert.Empty(stateStore.SavedRecords);
     }
 
+    [Fact]
+    public async Task ExecuteAsync_ManualRetryClockInFailed_CallsProviderOnceAndStoresSucceeded()
+    {
+        var provider = FakeProvider.Success();
+        var stateStore = new FakeAttendanceStateStore(
+            new DailyAttendanceRecord
+            {
+                AttendanceDate = AttendanceDate,
+                ClockInState = AttendanceActionState.Failed
+            });
+
+        var service = CreateService(provider, stateStore);
+
+        var result = await service.ExecuteAsync(
+            AttendanceActionType.ClockIn,
+            ClockInDueUtc,
+            AttendanceActionExecutionMode.ManualRetry);
+
+        Assert.Equal(
+            AttendanceActionExecutionStatus.Succeeded,
+            result.Status);
+        Assert.True(result.ProviderRequestSent);
+        Assert.True(result.ProviderConfirmed);
+        Assert.Equal(1, provider.ClockInCallCount);
+        Assert.Equal(0, provider.ClockOutCallCount);
+        Assert.Equal(
+            AttendanceActionState.Succeeded,
+            stateStore.SavedRecords[^1].ClockInState);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ManualRetryClockInFailed_ProviderRejects_RemainsFailed()
+    {
+        var provider = FakeProvider.Rejected();
+        var stateStore = new FakeAttendanceStateStore(
+            new DailyAttendanceRecord
+            {
+                AttendanceDate = AttendanceDate,
+                ClockInState = AttendanceActionState.Failed
+            });
+
+        var service = CreateService(provider, stateStore);
+
+        var result = await service.ExecuteAsync(
+            AttendanceActionType.ClockIn,
+            ClockInDueUtc,
+            AttendanceActionExecutionMode.ManualRetry);
+
+        Assert.Equal(
+            AttendanceActionExecutionStatus.ProviderRejected,
+            result.Status);
+        Assert.True(result.ProviderRequestSent);
+        Assert.False(result.ProviderConfirmed);
+        Assert.Equal(1, provider.ClockInCallCount);
+        Assert.Equal(
+            AttendanceActionState.Failed,
+            stateStore.SavedRecords[^1].ClockInState);
+    }
+
+    [Theory]
+    [InlineData(AttendanceActionState.Unknown)]
+    [InlineData(AttendanceActionState.Succeeded)]
+    [InlineData(AttendanceActionState.InProgress)]
+    [InlineData(AttendanceActionState.Skipped)]
+    [InlineData(AttendanceActionState.Due)]
+    [InlineData(AttendanceActionState.NotDue)]
+    public async Task ExecuteAsync_ManualRetryClockInUnsafeStates_DoesNotCallProvider(
+        AttendanceActionState unsafeState)
+    {
+        var provider = FakeProvider.Success();
+        var stateStore = new FakeAttendanceStateStore(
+            new DailyAttendanceRecord
+            {
+                AttendanceDate = AttendanceDate,
+                ClockInState = unsafeState
+            });
+
+        var service = CreateService(provider, stateStore);
+
+        var result = await service.ExecuteAsync(
+            AttendanceActionType.ClockIn,
+            ClockInDueUtc,
+            AttendanceActionExecutionMode.ManualRetry);
+
+        Assert.Equal(
+            AttendanceActionExecutionStatus.NotEligible,
+            result.Status);
+        Assert.False(result.ProviderRequestSent);
+        Assert.Equal(0, provider.ClockInCallCount);
+        Assert.Empty(stateStore.SavedRecords);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ManualRetryClockInNonWorkday_DoesNotCallProvider()
+    {
+        var provider = FakeProvider.Success();
+        var stateStore = new FakeAttendanceStateStore(
+            new DailyAttendanceRecord
+            {
+                AttendanceDate = NonWorkdayAttendanceDate,
+                ClockInState = AttendanceActionState.Failed
+            });
+
+        var service = CreateService(provider, stateStore);
+
+        var result = await service.ExecuteAsync(
+            AttendanceActionType.ClockIn,
+            NonWorkdayUtc,
+            AttendanceActionExecutionMode.ManualRetry);
+
+        Assert.Equal(
+            AttendanceActionExecutionStatus.NotEligible,
+            result.Status);
+        Assert.False(result.ProviderRequestSent);
+        Assert.Equal(0, provider.ClockInCallCount);
+        Assert.Empty(stateStore.SavedRecords);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ManualRetryClockOutFailed_CallsProviderOnceAndStoresSucceeded()
+    {
+        var provider = FakeProvider.Success();
+        var stateStore = new FakeAttendanceStateStore(
+            new DailyAttendanceRecord
+            {
+                AttendanceDate = AttendanceDate,
+                ClockInState = AttendanceActionState.Succeeded,
+                ClockOutState = AttendanceActionState.Failed
+            });
+
+        var service = CreateService(provider, stateStore);
+
+        var result = await service.ExecuteAsync(
+            AttendanceActionType.ClockOut,
+            ClockOutDueUtc,
+            AttendanceActionExecutionMode.ManualRetry);
+
+        Assert.Equal(
+            AttendanceActionExecutionStatus.Succeeded,
+            result.Status);
+        Assert.True(result.ProviderRequestSent);
+        Assert.True(result.ProviderConfirmed);
+        Assert.Equal(0, provider.ClockInCallCount);
+        Assert.Equal(1, provider.ClockOutCallCount);
+        Assert.Equal(
+            AttendanceActionState.Succeeded,
+            stateStore.SavedRecords[^1].ClockOutState);
+    }
+
+    [Theory]
+    [InlineData(AttendanceActionState.Unknown)]
+    [InlineData(AttendanceActionState.Succeeded)]
+    [InlineData(AttendanceActionState.InProgress)]
+    [InlineData(AttendanceActionState.Skipped)]
+    public async Task ExecuteAsync_ManualRetryClockOutUnsafeStates_DoesNotCallProvider(
+        AttendanceActionState unsafeState)
+    {
+        var provider = FakeProvider.Success();
+        var stateStore = new FakeAttendanceStateStore(
+            new DailyAttendanceRecord
+            {
+                AttendanceDate = AttendanceDate,
+                ClockInState = AttendanceActionState.Succeeded,
+                ClockOutState = unsafeState
+            });
+
+        var service = CreateService(provider, stateStore);
+
+        var result = await service.ExecuteAsync(
+            AttendanceActionType.ClockOut,
+            ClockOutDueUtc,
+            AttendanceActionExecutionMode.ManualRetry);
+
+        Assert.Equal(
+            AttendanceActionExecutionStatus.NotEligible,
+            result.Status);
+        Assert.False(result.ProviderRequestSent);
+        Assert.Equal(0, provider.ClockOutCallCount);
+        Assert.Empty(stateStore.SavedRecords);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ManualRetryClockOutWhenClockInNotSucceeded_DoesNotCallProvider()
+    {
+        var provider = FakeProvider.Success();
+        var stateStore = new FakeAttendanceStateStore(
+            new DailyAttendanceRecord
+            {
+                AttendanceDate = AttendanceDate,
+                ClockInState = AttendanceActionState.Failed,
+                ClockOutState = AttendanceActionState.Failed
+            });
+
+        var service = CreateService(provider, stateStore);
+
+        var result = await service.ExecuteAsync(
+            AttendanceActionType.ClockOut,
+            ClockOutDueUtc,
+            AttendanceActionExecutionMode.ManualRetry);
+
+        Assert.Equal(
+            AttendanceActionExecutionStatus.NotEligible,
+            result.Status);
+        Assert.False(result.ProviderRequestSent);
+        Assert.Equal(0, provider.ClockOutCallCount);
+        Assert.Empty(stateStore.SavedRecords);
+    }
+
     private static readonly DateOnly AttendanceDate =
         new(2026, 9, 8);
+
+    private static readonly DateOnly NonWorkdayAttendanceDate =
+        new(2026, 9, 12);
 
     private static readonly DateTimeOffset ClockInEarlyUtc =
         new(2026, 9, 8, 10, 30, 0, TimeSpan.Zero);
@@ -545,6 +756,9 @@ public sealed class AttendanceActionExecutionServiceTests
 
     private static readonly DateTimeOffset ClockOutLateUtc =
         new(2026, 9, 8, 19, 35, 0, TimeSpan.Zero);
+
+    private static readonly DateTimeOffset NonWorkdayUtc =
+        new(2026, 9, 12, 15, 0, 0, TimeSpan.Zero);
 
     private static AttendanceActionExecutionService CreateService(
         FakeProvider provider,

@@ -13,4 +13,6 @@ public interface ILocalNotificationService
         string title,
         string message,
         AttendanceActionType actionType);
+
+    Task CancelAsync(int notificationId);
 }

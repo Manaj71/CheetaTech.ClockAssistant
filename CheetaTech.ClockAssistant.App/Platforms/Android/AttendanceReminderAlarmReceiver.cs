@@ -13,9 +13,6 @@ public sealed class AttendanceReminderAlarmReceiver
     internal const string ActionAttendanceReminder =
         "CheetaTech.ClockAssistant.Action.ATTENDANCE_REMINDER";
 
-    private const int ClockInReminderNotificationId = 6101;
-    private const int ClockOutReminderNotificationId = 6102;
-
     public override void OnReceive(
         Context? context,
         Intent? intent)
@@ -79,7 +76,7 @@ public sealed class AttendanceReminderAlarmReceiver
             {
                 case AttendanceActionType.ClockIn:
                     await notificationService.ShowAsync(
-                        ClockInReminderNotificationId,
+                        AttendanceReminderNotificationIds.ClockIn,
                         "Clock In reminder",
                         "Clock In is due. Expand this notification for actions.",
                         AttendanceActionType.ClockIn);
@@ -87,7 +84,7 @@ public sealed class AttendanceReminderAlarmReceiver
 
                 case AttendanceActionType.ClockOut:
                     await notificationService.ShowAsync(
-                        ClockOutReminderNotificationId,
+                        AttendanceReminderNotificationIds.ClockOut,
                         "Clock Out reminder",
                         "Clock Out is due. Expand this notification for actions.",
                         AttendanceActionType.ClockOut);

@@ -293,6 +293,11 @@ public sealed class AttendanceActionExecutionService
                     evaluation,
                     actionType),
 
+            AttendanceActionExecutionMode.ManualRetry =>
+                IsManualRetryEligible(
+                    evaluation,
+                    actionType),
+
             _ => false
         };
     }
@@ -333,6 +338,28 @@ public sealed class AttendanceActionExecutionService
                 evaluation.ClockInState == AttendanceActionState.Succeeded &&
                 evaluation.ClockOutState is AttendanceActionState.NotDue
                     or AttendanceActionState.Due,
+
+            _ => false
+        };
+    }
+
+    private static bool IsManualRetryEligible(
+        AttendanceStateEvaluation evaluation,
+        AttendanceActionType actionType)
+    {
+        if (evaluation.DayState == AttendanceDayState.NotScheduled)
+        {
+            return false;
+        }
+
+        return actionType switch
+        {
+            AttendanceActionType.ClockIn =>
+                evaluation.ClockInState == AttendanceActionState.Failed,
+
+            AttendanceActionType.ClockOut =>
+                evaluation.ClockInState == AttendanceActionState.Succeeded &&
+                evaluation.ClockOutState == AttendanceActionState.Failed,
 
             _ => false
         };

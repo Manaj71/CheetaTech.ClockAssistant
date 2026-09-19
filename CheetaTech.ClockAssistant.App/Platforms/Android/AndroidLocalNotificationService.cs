@@ -202,6 +202,19 @@ public sealed class AndroidLocalNotificationService : ILocalNotificationService
         return true;
     }
 
+    public Task CancelAsync(int notificationId)
+    {
+        if (notificationId < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(notificationId),
+                "Notification id must be zero or greater.");
+        }
+
+        _notificationManager.Cancel(notificationId);
+        return Task.CompletedTask;
+    }
+
     private static void EnsureNotificationChannel()
     {
         if (!OperatingSystem.IsAndroidVersionAtLeast(26))

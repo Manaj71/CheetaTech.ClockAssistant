@@ -18,6 +18,25 @@ public sealed class AttendanceStateStoreTests
     }
 
     [Fact]
+    public async Task SaveAndLoadAsync_PreservesCompletedElsewhereSource()
+    {
+        var persistence = new InMemoryAttendanceStatePersistence();
+        var store = new AttendanceStateStore(persistence);
+        var record = new DailyAttendanceRecord
+        {
+            AttendanceDate = new DateOnly(2026, 9, 7),
+            ClockInState = AttendanceActionState.Succeeded,
+            ClockInCompletionSource = AttendanceActionCompletionSource.CompletedElsewhere,
+            ClockOutState = AttendanceActionState.NotDue
+        };
+
+        await store.SaveAsync(record);
+        var loaded = await store.LoadAsync(record.AttendanceDate);
+
+        Assert.Equal(record, loaded);
+    }
+
+    [Fact]
     public async Task NewStoreInstance_RecoversPersistedState()
     {
         var persistence = new InMemoryAttendanceStatePersistence();

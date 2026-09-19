@@ -28,10 +28,10 @@
 		<MauiXamlInflator>SourceGen</MauiXamlInflator>
 
 		<!-- Display name -->
-		<ApplicationTitle>Clock Assistant</ApplicationTitle>
+		<ApplicationTitle>ShiftPilot</ApplicationTitle>
 
 		<!-- App Identifier -->
-		<ApplicationId>com.companyname.cheetatech.clockassistant.app</ApplicationId>
+		<ApplicationId>ca.cheetatech.shiftpilot</ApplicationId>
 
 		<!-- Versions -->
 		<ApplicationDisplayVersion>1.0.0</ApplicationDisplayVersion>

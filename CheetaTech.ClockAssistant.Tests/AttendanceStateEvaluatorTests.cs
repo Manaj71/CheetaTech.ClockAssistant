@@ -149,6 +149,21 @@ public sealed class AttendanceStateEvaluatorTests
         Assert.Equal(new DateOnly(2026, 9, 7), result.AttendanceDate);
     }
 
+    [Fact]
+    public void Evaluate_PreservesAttendanceDateAcrossRolloverToNewDay()
+    {
+        var configuration = CreateConfiguration();
+        var dayBeforeRollover = new DateTimeOffset(2026, 9, 8, 3, 0, 0, TimeSpan.Zero);
+        var dayAfterRollover = new DateTimeOffset(2026, 9, 8, 14, 0, 0, TimeSpan.Zero);
+
+        var first = Evaluator.Evaluate(configuration, dayBeforeRollover);
+        var second = Evaluator.Evaluate(configuration, dayAfterRollover);
+
+        Assert.NotEqual(first.AttendanceDate, second.AttendanceDate);
+        Assert.Equal(new DateOnly(2026, 9, 7), first.AttendanceDate);
+        Assert.Equal(new DateOnly(2026, 9, 8), second.AttendanceDate);
+    }
+
     private static ClockAssistantConfiguration CreateConfiguration()
     {
         return new ClockAssistantConfiguration
