@@ -65,7 +65,7 @@ public sealed class AndroidDeviceAuthenticationService
             new BiometricPrompt.PromptInfo.Builder()
                 .SetTitle("Unlock Settings")
                 .SetSubtitle(
-                    "Verify your identity to access Clock Assistant settings.")
+                    "Verify your identity to access ShiftPilot settings.")
                 .SetAllowedAuthenticators(allowedAuthenticators)
                 .Build();
 
