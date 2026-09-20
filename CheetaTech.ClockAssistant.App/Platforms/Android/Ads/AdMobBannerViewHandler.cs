@@ -12,7 +12,8 @@ namespace CheetaTech.ClockAssistant.App.Platforms.Android.Ads;
 
 /// <summary>
 /// Android handler for <see cref="AdMobBannerView"/>. Consent-gates Mobile Ads init and loads
-/// one Google anchored adaptive test banner. Failures leave an empty zero-height view.
+/// one Google large anchored adaptive test banner.
+/// Failures leave an empty zero-height view.
 /// </summary>
 public sealed class AdMobBannerViewHandler : ViewHandler<AdMobBannerView, FrameLayout>
 {
@@ -101,7 +102,12 @@ public sealed class AdMobBannerViewHandler : ViewHandler<AdMobBannerView, FrameL
 		DestroyAdView(platformView);
 
 		var adWidth = GetAdWidthDp(platformView, activity);
-		var adSize = AdSize.GetCurrentOrientationAnchoredAdaptiveBannerAdSize(activity, adWidth);
+		var adSize = AdSize.GetLargeAnchoredAdaptiveBannerAdSize(activity, adWidth);
+		if (!IsUsableAdSize(adSize))
+		{
+			// Leave empty zero-height host; do not create or load a banner.
+			return;
+		}
 
 		var adView = new AdView(activity)
 		{
@@ -117,6 +123,12 @@ public sealed class AdMobBannerViewHandler : ViewHandler<AdMobBannerView, FrameL
 		_adView = adView;
 		adView.LoadAd(new AdRequest.Builder().Build());
 	}
+
+	private static bool IsUsableAdSize(AdSize? adSize)
+		=> adSize is not null
+			&& !ReferenceEquals(adSize, AdSize.Invalid)
+			&& adSize.Width > 0
+			&& adSize.Height > 0;
 
 	private static int GetAdWidthDp(FrameLayout platformView, global::Android.App.Activity activity)
 	{

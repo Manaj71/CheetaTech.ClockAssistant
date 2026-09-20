@@ -6,100 +6,105 @@
     x:Class="CheetaTech.ClockAssistant.App.MainPage"
     Title="ShiftPilot">
 
-    <ScrollView>
-        <VerticalStackLayout
-            Padding="24"
-            Spacing="16"
-            MaximumWidthRequest="560"
-            HorizontalOptions="Center">
+    <!-- Banner row is Auto-height so Google's adaptive AdSize drives the occupied space.
+         Attendance content stays in the scrollable row above and is never overlaid. -->
+    <Grid RowDefinitions="*,Auto">
+        <ScrollView Grid.Row="0">
+            <VerticalStackLayout
+                Padding="24"
+                Spacing="16"
+                MaximumWidthRequest="560"
+                HorizontalOptions="Center">
 
-            <Label
-                Text="ShiftPilot"
-                FontSize="28"
-                FontAttributes="Bold" />
+                <Label
+                    Text="ShiftPilot"
+                    FontSize="28"
+                    FontAttributes="Bold" />
 
-            <Label
-                Text="Attendance Date"
-                FontSize="18"
-                FontAttributes="Bold" />
-            <Label
-                x:Name="AttendanceDateValue"
-                FontSize="16"
-                LineBreakMode="WordWrap" />
+                <Label
+                    Text="Attendance Date"
+                    FontSize="18"
+                    FontAttributes="Bold" />
+                <Label
+                    x:Name="AttendanceDateValue"
+                    FontSize="16"
+                    LineBreakMode="WordWrap" />
 
-            <Label
-                Text="Current Shift"
-                FontSize="20"
-                FontAttributes="Bold" />
-            <Label
-                x:Name="ShiftContextValue"
-                FontSize="16"
-                LineBreakMode="WordWrap" />
+                <Label
+                    Text="Current Shift"
+                    FontSize="20"
+                    FontAttributes="Bold" />
+                <Label
+                    x:Name="ShiftContextValue"
+                    FontSize="16"
+                    LineBreakMode="WordWrap" />
 
-            <Border
-                Padding="12"
-                StrokeThickness="1">
-                <VerticalStackLayout Spacing="6">
-                    <Label
-                        Text="Clock In"
-                        FontSize="18"
-                        FontAttributes="Bold" />
-                    <Label
-                        x:Name="ClockInStatusValue"
-                        FontAttributes="Bold"
-                        LineBreakMode="WordWrap" />
-                    <Label
-                        x:Name="ClockInTimeValue"
-                        FontSize="12"
-                        Opacity="0.8"
-                        LineBreakMode="WordWrap" />
-                </VerticalStackLayout>
-            </Border>
+                <Border
+                    Padding="12"
+                    StrokeThickness="1">
+                    <VerticalStackLayout Spacing="6">
+                        <Label
+                            Text="Clock In"
+                            FontSize="18"
+                            FontAttributes="Bold" />
+                        <Label
+                            x:Name="ClockInStatusValue"
+                            FontAttributes="Bold"
+                            LineBreakMode="WordWrap" />
+                        <Label
+                            x:Name="ClockInTimeValue"
+                            FontSize="12"
+                            Opacity="0.8"
+                            LineBreakMode="WordWrap" />
+                    </VerticalStackLayout>
+                </Border>
 
-            <Border
-                Padding="12"
-                StrokeThickness="1">
-                <VerticalStackLayout Spacing="6">
-                    <Label
-                        Text="Clock Out"
-                        FontSize="18"
-                        FontAttributes="Bold" />
-                    <Label
-                        x:Name="ClockOutStatusValue"
-                        FontAttributes="Bold"
-                        LineBreakMode="WordWrap" />
-                    <Label
-                        x:Name="ClockOutTimeValue"
-                        FontSize="12"
-                        Opacity="0.8"
-                        LineBreakMode="WordWrap" />
-                </VerticalStackLayout>
-            </Border>
+                <Border
+                    Padding="12"
+                    StrokeThickness="1">
+                    <VerticalStackLayout Spacing="6">
+                        <Label
+                            Text="Clock Out"
+                            FontSize="18"
+                            FontAttributes="Bold" />
+                        <Label
+                            x:Name="ClockOutStatusValue"
+                            FontAttributes="Bold"
+                            LineBreakMode="WordWrap" />
+                        <Label
+                            x:Name="ClockOutTimeValue"
+                            FontSize="12"
+                            Opacity="0.8"
+                            LineBreakMode="WordWrap" />
+                    </VerticalStackLayout>
+                </Border>
 
-            <Label
-                x:Name="SummaryLabel"
-                FontAttributes="Bold"
-                LineBreakMode="WordWrap" />
+                <Label
+                    x:Name="SummaryLabel"
+                    FontAttributes="Bold"
+                    LineBreakMode="WordWrap" />
 
-            <Label
-                x:Name="ResultLabel"
-                IsVisible="False"
-                LineBreakMode="WordWrap" />
+                <Label
+                    x:Name="ResultLabel"
+                    IsVisible="False"
+                    LineBreakMode="WordWrap" />
 
-            <Button
-                x:Name="ActionButton"
-                IsVisible="False"
-                Text="Clock In" />
+                <Button
+                    x:Name="ActionButton"
+                    IsVisible="False"
+                    Text="Clock In" />
 
-            <Button
-                x:Name="SecondaryActionButton"
-                IsVisible="False"
-                Text="I already Clocked In elsewhere" />
+                <Button
+                    x:Name="SecondaryActionButton"
+                    IsVisible="False"
+                    Text="I already Clocked In elsewhere" />
 
-            <controls:AdMobBannerView
-                VerticalOptions="Start"
-                HorizontalOptions="Fill" />
+            </VerticalStackLayout>
+        </ScrollView>
 
-        </VerticalStackLayout>
-    </ScrollView>
+        <controls:AdMobBannerView
+            Grid.Row="1"
+            VerticalOptions="End"
+            HorizontalOptions="Fill" />
+    </Grid>
 </ContentPage>
