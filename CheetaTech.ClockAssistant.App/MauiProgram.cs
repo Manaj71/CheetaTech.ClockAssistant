@@ -56,7 +56,15 @@ builder.Services.AddSingleton<
 			{
 				fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
 				fonts.AddFont("OpenSans-Semibold.ttf", "OpenSansSemibold");
-			});
+			})
+#if ANDROID
+			.ConfigureMauiHandlers(handlers =>
+			{
+				handlers.AddHandler<CheetaTech.ClockAssistant.App.Controls.AdMobBannerView,
+					CheetaTech.ClockAssistant.App.Platforms.Android.Ads.AdMobBannerViewHandler>();
+			})
+#endif
+			;
 
 #if DEBUG
 		builder.Logging.AddDebug();

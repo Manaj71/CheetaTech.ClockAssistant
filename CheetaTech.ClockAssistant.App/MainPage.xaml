@@ -2,6 +2,7 @@
 <ContentPage
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:controls="clr-namespace:CheetaTech.ClockAssistant.App.Controls"
     x:Class="CheetaTech.ClockAssistant.App.MainPage"
     Title="ShiftPilot">
 
@@ -94,6 +95,10 @@
                 x:Name="SecondaryActionButton"
                 IsVisible="False"
                 Text="I already Clocked In elsewhere" />
+
+            <controls:AdMobBannerView
+                VerticalOptions="Start"
+                HorizontalOptions="Fill" />
 
         </VerticalStackLayout>
     </ScrollView>
