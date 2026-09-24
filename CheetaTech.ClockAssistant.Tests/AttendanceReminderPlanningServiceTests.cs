@@ -120,6 +120,65 @@ public sealed class AttendanceReminderPlanningServiceTests
     }
 
     [Fact]
+    public async Task PlanNextAsync_SkipClockInAfterReminderDelivery_StillPlansClockOutLeadStart()
+    {
+        // Mirrors AlarmReceiver chaining: after delivering Clock In reminder,
+        // ScheduleNextAfterActionAsync(ClockIn) must register Clock Out even
+        // while Clock In is still outstanding.
+        var service = CreateService();
+
+        var result =
+            await service.PlanNextAsync(
+                new DateTimeOffset(
+                    2026, 9, 8, 12, 0, 0, TimeSpan.Zero),
+                skipActionType: AttendanceActionType.ClockIn);
+
+        Assert.NotNull(result);
+        Assert.Equal(
+            AttendanceActionType.ClockOut,
+            result.ActionType);
+        Assert.Equal(
+            new DateTimeOffset(
+                2026, 9, 8, 19, 15, 0, TimeSpan.Zero),
+            result.TriggerAtUtc);
+        Assert.False(result.IsImmediate);
+    }
+
+    [Fact]
+    public async Task PlanNextAsync_SkipClockInAfterSuccessfulClockIn_PlansClockOutLeadStart()
+    {
+        var stateStore =
+            new FakeAttendanceStateStore(
+                new DailyAttendanceRecord
+                {
+                    AttendanceDate =
+                        new DateOnly(2026, 9, 8),
+                    ClockInState =
+                        AttendanceActionState.Succeeded
+                });
+
+        var service =
+            CreateService(
+                stateStore: stateStore);
+
+        var result =
+            await service.PlanNextAsync(
+                new DateTimeOffset(
+                    2026, 9, 8, 12, 0, 0, TimeSpan.Zero),
+                skipActionType: AttendanceActionType.ClockIn);
+
+        Assert.NotNull(result);
+        Assert.Equal(
+            AttendanceActionType.ClockOut,
+            result.ActionType);
+        Assert.Equal(
+            new DateTimeOffset(
+                2026, 9, 8, 19, 15, 0, TimeSpan.Zero),
+            result.TriggerAtUtc);
+        Assert.False(result.IsImmediate);
+    }
+
+    [Fact]
     public async Task PlanNextAsync_ClockOutAlreadyDue_ReturnsImmediate()
     {
         var now =

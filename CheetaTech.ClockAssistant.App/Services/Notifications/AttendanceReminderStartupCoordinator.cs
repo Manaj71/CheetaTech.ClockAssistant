@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using CheetaTech.ClockAssistant.Core.Attendance;
 
 namespace CheetaTech.ClockAssistant.App.Services.Notifications;
@@ -35,8 +36,14 @@ public sealed class AttendanceReminderStartupCoordinator
             return null;
         }
 
-        return await _reminderScheduler.ScheduleOneTimeAsync(
-            plan.TriggerAtUtc);
+        var result =
+            await _reminderScheduler.ScheduleOneTimeAsync(
+                plan.TriggerAtUtc);
+
+        Trace.WriteLine(
+            $"REMINDER_NEXT_SCHEDULED Action={plan.ActionType} Result={result}");
+
+        return result;
     }
 
     public async Task<AttendanceReminderScheduleResult?> ScheduleNextAfterActionAsync(
@@ -55,7 +62,14 @@ public sealed class AttendanceReminderStartupCoordinator
             return null;
         }
 
-        return await _reminderScheduler.ScheduleOneTimeAsync(
-            plan.TriggerAtUtc,
-            cancellationToken);
-    }}
+        var result =
+            await _reminderScheduler.ScheduleOneTimeAsync(
+                plan.TriggerAtUtc,
+                cancellationToken);
+
+        Trace.WriteLine(
+            $"REMINDER_NEXT_SCHEDULED Action={plan.ActionType} Result={result}");
+
+        return result;
+    }
+}
