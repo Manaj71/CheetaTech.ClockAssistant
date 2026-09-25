@@ -108,55 +108,68 @@ public partial class AppShell : Shell
         Items.Clear();
         FlyoutBehavior = FlyoutBehavior.Flyout;
 
-        var homeItem =
+        // One FlyoutItem with AsMultipleItems keeps every destination as a
+        // permanent peer in the hamburger/flyout. Separate FlyoutItems were
+        // leaving Home absent after navigating to History or Settings.
+        var destinations =
             new FlyoutItem
             {
-                Title = "Home",
-                Route = "Home"
+                Route = "Authenticated",
+                FlyoutDisplayOptions = FlyoutDisplayOptions.AsMultipleItems
             };
 
-        homeItem.Items.Add(
-            new ShellContent
-            {
-                Title = "Home",
-                Route = "MainPage",
-                Content = _mainPage
-            });
+        var homeDestination =
+            CreateFlyoutDestination(
+                title: "Home",
+                sectionRoute: "Home",
+                contentRoute: "MainPage",
+                content: _mainPage);
 
-        var historyItem =
-            new FlyoutItem
+        var historyDestination =
+            CreateFlyoutDestination(
+                title: "History",
+                sectionRoute: "History",
+                contentRoute: "HistoryPage",
+                content: _historyPage);
+
+        var settingsDestination =
+            CreateFlyoutDestination(
+                title: "Settings",
+                sectionRoute: "Settings",
+                contentRoute: "SettingsPage",
+                content: _settingsPage);
+
+        destinations.Items.Add(homeDestination);
+        destinations.Items.Add(historyDestination);
+        destinations.Items.Add(settingsDestination);
+
+        Items.Add(destinations);
+
+        destinations.CurrentItem = homeDestination;
+        CurrentItem = destinations;
+    }
+
+    private static Tab CreateFlyoutDestination(
+        string title,
+        string sectionRoute,
+        string contentRoute,
+        Page content)
+    {
+        var section =
+            new Tab
             {
-                Title = "History",
-                Route = "History"
+                Title = title,
+                Route = sectionRoute
             };
 
-        historyItem.Items.Add(
+        section.Items.Add(
             new ShellContent
             {
-                Title = "History",
-                Route = "HistoryPage",
-                Content = _historyPage
+                Title = title,
+                Route = contentRoute,
+                Content = content
             });
 
-        var settingsItem =
-            new FlyoutItem
-            {
-                Title = "Settings",
-                Route = "Settings"
-            };
-
-        settingsItem.Items.Add(
-            new ShellContent
-            {
-                Title = "Settings",
-                Route = "SettingsPage",
-                Content = _settingsPage
-            });
-
-        Items.Add(homeItem);
-        Items.Add(historyItem);
-        Items.Add(settingsItem);
-
-        CurrentItem = homeItem;
+        return section;
     }
 }

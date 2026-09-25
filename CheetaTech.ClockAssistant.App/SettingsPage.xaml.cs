@@ -252,7 +252,7 @@ public partial class SettingsPage : ContentPage
 
         try
         {
-            await Shell.Current.GoToAsync("//Home/MainPage");
+            await Shell.Current.GoToAsync("//Authenticated/Home/MainPage");
         }
         catch
         {
