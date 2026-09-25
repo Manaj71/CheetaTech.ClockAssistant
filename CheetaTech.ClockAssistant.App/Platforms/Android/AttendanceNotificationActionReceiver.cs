@@ -314,9 +314,17 @@ public sealed class AttendanceNotificationActionReceiver
 
         if (reminderCoordinator is not null)
         {
-            await reminderCoordinator.ScheduleNextAfterActionAsync(
-                actionType,
-                DateTimeOffset.UtcNow);
+            if (AttendanceActionRecovery.ShouldSkipActionWhenSchedulingNext(result))
+            {
+                await reminderCoordinator.ScheduleNextAfterActionAsync(
+                    actionType,
+                    DateTimeOffset.UtcNow);
+            }
+            else
+            {
+                await reminderCoordinator.ScheduleNextAsync(
+                    DateTimeOffset.UtcNow);
+            }
         }
 
         var actionName =
@@ -346,10 +354,15 @@ public sealed class AttendanceNotificationActionReceiver
                     ),
 
                 AttendanceActionExecutionStatus.ProviderRejected =>
-                    (
-                        $"{actionName} failed",
-                        "The provider did not confirm the action."
-                    ),
+                    AttendanceActionRecovery.AllowsSafeProviderRetry(result)
+                        ? (
+                            $"{actionName} failed",
+                            "The provider did not receive the action. You can retry when connectivity returns."
+                          )
+                        : (
+                            $"{actionName} failed",
+                            "The provider did not confirm the action."
+                          ),
 
                 AttendanceActionExecutionStatus.ProviderUnknown =>
                     (
@@ -394,11 +407,30 @@ public sealed class AttendanceNotificationActionReceiver
                     )
             };
 
-        ShowResultNotification(
-            context,
-            notificationId,
-            title,
-            message);
+        if (AttendanceActionRecovery.ShouldClearActionNotification(result))
+        {
+            // Clear any leftover companion result from a prior safe pre-send
+            // failure before replacing with the terminal/uncertain result.
+            NotificationManagerCompat
+                .From(context)?
+                .Cancel(notificationId + 1000);
+
+            ShowResultNotification(
+                context,
+                notificationId,
+                title,
+                message);
+        }
+        else
+        {
+            // Keep the eligible action notification available for safe retry.
+            // Surface the failure text without removing the Clock In/Out action.
+            ShowResultNotification(
+                context,
+                notificationId + 1000,
+                title,
+                message);
+        }
 
 
         try

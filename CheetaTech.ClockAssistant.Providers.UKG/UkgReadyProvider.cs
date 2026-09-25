@@ -249,6 +249,7 @@ public sealed class UkgReadyProvider : ITimeClockProvider
         var actionName = punchAction == UkgPunchAction.ClockIn
             ? "ClockIn"
             : "ClockOut";
+        var providerRequestSent = false;
 
         if (_credentials is null)
         {
@@ -256,7 +257,8 @@ public sealed class UkgReadyProvider : ITimeClockProvider
                 action: actionName,
                 timestamp: timestamp,
                 technicalStatus: "CredentialsUnavailable",
-                errorMessage: "UKG credentials are required for punch execution.");
+                errorMessage: "UKG credentials are required for punch execution.",
+                providerRequestSent: false);
         }
 
         try
@@ -278,6 +280,8 @@ public sealed class UkgReadyProvider : ITimeClockProvider
                 Content = content
             };
 
+            providerRequestSent = true;
+
             using var response = await _httpClient
                 .SendAsync(request)
                 .ConfigureAwait(false);
@@ -292,7 +296,8 @@ public sealed class UkgReadyProvider : ITimeClockProvider
                     action: actionName,
                     timestamp: timestamp,
                     technicalStatus: $"HTTP_{(int)response.StatusCode}",
-                    errorMessage: $"UKG punch request returned HTTP {(int)response.StatusCode}.");
+                    errorMessage: $"UKG punch request returned HTTP {(int)response.StatusCode}.",
+                    providerRequestSent: true);
             }
 
             var parsed = UkgPunchResponseParser.Parse(
@@ -308,7 +313,8 @@ public sealed class UkgReadyProvider : ITimeClockProvider
                 TechnicalStatus = parsed.TechnicalStatus,
                 ErrorMessage = parsed.Success
                     ? null
-                    : parsed.ProviderMessage ?? "UKG did not confirm the punch."
+                    : parsed.ProviderMessage ?? "UKG did not confirm the punch.",
+                ProviderRequestSent = true
             };
         }
         catch (UkgHttpStatusException ex)
@@ -317,7 +323,8 @@ public sealed class UkgReadyProvider : ITimeClockProvider
                 action: actionName,
                 timestamp: timestamp,
                 technicalStatus: $"HTTP_{ex.StatusCode}",
-                errorMessage: ex.Message);
+                errorMessage: ex.Message,
+                providerRequestSent: providerRequestSent);
         }
         catch (HttpRequestException ex)
         {
@@ -325,7 +332,8 @@ public sealed class UkgReadyProvider : ITimeClockProvider
                 action: actionName,
                 timestamp: timestamp,
                 technicalStatus: "NetworkUnavailable",
-                errorMessage: ex.Message);
+                errorMessage: ex.Message,
+                providerRequestSent: providerRequestSent);
         }
         catch (TaskCanceledException ex)
         {
@@ -333,7 +341,8 @@ public sealed class UkgReadyProvider : ITimeClockProvider
                 action: actionName,
                 timestamp: timestamp,
                 technicalStatus: "NetworkUnavailable",
-                errorMessage: ex.Message);
+                errorMessage: ex.Message,
+                providerRequestSent: providerRequestSent);
         }
         catch (InvalidOperationException ex)
         {
@@ -341,7 +350,8 @@ public sealed class UkgReadyProvider : ITimeClockProvider
                 action: actionName,
                 timestamp: timestamp,
                 technicalStatus: "ProviderChanged",
-                errorMessage: ex.Message);
+                errorMessage: ex.Message,
+                providerRequestSent: providerRequestSent);
         }
         catch (ArgumentException ex)
         {
@@ -349,7 +359,8 @@ public sealed class UkgReadyProvider : ITimeClockProvider
                 action: actionName,
                 timestamp: timestamp,
                 technicalStatus: "InvalidConfiguration",
-                errorMessage: ex.Message);
+                errorMessage: ex.Message,
+                providerRequestSent: providerRequestSent);
         }
     }
 
@@ -456,7 +467,8 @@ public sealed class UkgReadyProvider : ITimeClockProvider
         string action,
         DateTimeOffset timestamp,
         string technicalStatus,
-        string errorMessage)
+        string errorMessage,
+        bool? providerRequestSent = null)
     {
         return new ProviderResult
         {
@@ -464,7 +476,8 @@ public sealed class UkgReadyProvider : ITimeClockProvider
             Action = action,
             Timestamp = timestamp,
             TechnicalStatus = technicalStatus,
-            ErrorMessage = errorMessage
+            ErrorMessage = errorMessage,
+            ProviderRequestSent = providerRequestSent
         };
     }
 

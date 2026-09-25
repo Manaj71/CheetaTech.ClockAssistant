@@ -242,9 +242,15 @@ public partial class MainPage : ContentPage
             await TryAppendResultAuditAsync(
                 result,
                 resultUtcNow);
-            await TryCancelStaleAttendanceNotificationAsync(actionType);
-            await TryScheduleReminderAsync(
+
+            if (AttendanceActionRecovery.ShouldClearActionNotification(result))
+            {
+                await TryCancelStaleAttendanceNotificationAsync(actionType);
+            }
+
+            await TryScheduleReminderAfterResultAsync(
                 actionType,
+                result,
                 resultUtcNow);
             await TryRecordHistoryAsync(
                 result,
@@ -623,6 +629,29 @@ public partial class MainPage : ContentPage
         }
     }
 
+    private async Task TryScheduleReminderAfterResultAsync(
+        AttendanceActionType actionType,
+        AttendanceActionExecutionResult result,
+        DateTimeOffset utcNow)
+    {
+        try
+        {
+            if (AttendanceActionRecovery.ShouldSkipActionWhenSchedulingNext(result))
+            {
+                await _reminderCoordinator.ScheduleNextAfterActionAsync(
+                    actionType,
+                    utcNow);
+            }
+            else
+            {
+                await _reminderCoordinator.ScheduleNextAsync(utcNow);
+            }
+        }
+        catch
+        {
+        }
+    }
+
     private async Task TryRecordHistoryAsync(
         AttendanceActionExecutionResult result,
         DateTimeOffset utcNow)
@@ -668,10 +697,15 @@ public partial class MainPage : ContentPage
                 ),
 
             AttendanceActionExecutionStatus.ProviderRejected =>
-                (
-                    $"{actionName} failed",
-                    "The provider did not confirm the action."
-                ),
+                AttendanceActionRecovery.AllowsSafeProviderRetry(result)
+                    ? (
+                        $"{actionName} failed",
+                        "The provider did not receive the action. You can retry when connectivity returns."
+                      )
+                    : (
+                        $"{actionName} failed",
+                        "The provider did not confirm the action."
+                      ),
 
             AttendanceActionExecutionStatus.ProviderUnknown =>
                 (

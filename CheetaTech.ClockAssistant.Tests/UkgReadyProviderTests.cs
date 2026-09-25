@@ -235,6 +235,7 @@ public sealed class UkgReadyProviderTests
         Assert.True(result.Success);
         Assert.Equal("ClockIn", result.Action);
         Assert.Equal("ProviderConfirmed", result.TechnicalStatus);
+        Assert.True(result.ProviderRequestSent);
 
         Assert.Equal(2, handler.Requests.Count);
         Assert.Equal(HttpMethod.Get, handler.Requests[0].Method);
@@ -269,6 +270,7 @@ public sealed class UkgReadyProviderTests
         Assert.True(result.Success);
         Assert.Equal("ClockOut", result.Action);
         Assert.Equal("ProviderConfirmed", result.TechnicalStatus);
+        Assert.True(result.ProviderRequestSent);
 
         Assert.Equal(2, handler.Requests.Count);
         Assert.Equal(HttpMethod.Get, handler.Requests[0].Method);
@@ -318,7 +320,50 @@ public sealed class UkgReadyProviderTests
         Assert.Equal(
             "CredentialsUnavailable",
             result.TechnicalStatus);
+        Assert.False(result.ProviderRequestSent);
         Assert.Empty(handler.Requests);
+    }
+
+    [Fact]
+    public async Task ClockInAsync_GetClockPageNetworkFailure_ReportsProviderRequestSentFalse()
+    {
+        var handler = new SequenceHttpMessageHandler(
+            new HttpRequestException("GET clock page unavailable"));
+
+        using var httpClient = new HttpClient(handler);
+        var provider = CreateProvider(
+            httpClient,
+            new UkgCredentials("fake-user", "fake-password"));
+
+        var result = await provider.ClockInAsync();
+
+        Assert.False(result.Success);
+        Assert.Equal("NetworkUnavailable", result.TechnicalStatus);
+        Assert.False(result.ProviderRequestSent);
+        Assert.Equal(1, handler.Requests.Count);
+        Assert.Equal(HttpMethod.Get, handler.Requests[0].Method);
+    }
+
+    [Fact]
+    public async Task ClockInAsync_PostSendAsyncThrows_ReportsProviderRequestSentTrue()
+    {
+        var handler = new SequenceHttpMessageHandler(
+            Response(HttpStatusCode.OK, ClockPage("POSTFAIL")),
+            new HttpRequestException("POST punch unavailable"));
+
+        using var httpClient = new HttpClient(handler);
+        var provider = CreateProvider(
+            httpClient,
+            new UkgCredentials("fake-user", "fake-password"));
+
+        var result = await provider.ClockInAsync();
+
+        Assert.False(result.Success);
+        Assert.Equal("NetworkUnavailable", result.TechnicalStatus);
+        Assert.True(result.ProviderRequestSent);
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.Equal(HttpMethod.Get, handler.Requests[0].Method);
+        Assert.Equal(HttpMethod.Post, handler.Requests[1].Method);
     }
 
     [Fact]
@@ -339,6 +384,7 @@ public sealed class UkgReadyProviderTests
 
         Assert.False(result.Success);
         Assert.Equal("HTTP_500", result.TechnicalStatus);
+        Assert.True(result.ProviderRequestSent);
     }
 
     private static UkgReadyProvider CreateProvider(
@@ -418,12 +464,12 @@ public sealed class UkgReadyProviderTests
 
     private sealed class SequenceHttpMessageHandler : HttpMessageHandler
     {
-        private readonly Queue<HttpResponseMessage> _responses;
+        private readonly Queue<object> _steps;
 
         public SequenceHttpMessageHandler(
-            params HttpResponseMessage[] responses)
+            params object[] steps)
         {
-            _responses = new Queue<HttpResponseMessage>(responses);
+            _steps = new Queue<object>(steps);
         }
 
         public List<CapturedRequest> Requests { get; } = [];
@@ -446,13 +492,24 @@ public sealed class UkgReadyProviderTests
                     request.RequestUri!,
                     body));
 
-            if (_responses.Count == 0)
+            if (_steps.Count == 0)
             {
                 throw new InvalidOperationException(
                     "No mocked HTTP response remains for this request.");
             }
 
-            var response = _responses.Dequeue();
+            var step = _steps.Dequeue();
+
+            if (step is Exception exception)
+            {
+                throw exception;
+            }
+
+            if (step is not HttpResponseMessage response)
+            {
+                throw new InvalidOperationException(
+                    "Mocked HTTP step must be a response or exception.");
+            }
 
             if (response.RequestMessage is null)
             {

@@ -99,7 +99,8 @@ public sealed class AttendanceActionExecutionService
             if (!IsEligible(
                     evaluation,
                     actionType,
-                    executionMode))
+                    executionMode,
+                    currentRecord))
             {
                 return Result(
                     actionType,
@@ -199,6 +200,8 @@ public sealed class AttendanceActionExecutionService
             }
             catch
             {
+                // Provider threw after the call started: treat as may-have-been-
+                // sent. Never allow blind retry without user verification.
                 return await SaveFinalStateAsync(
                     actionType,
                     evaluation.AttendanceDate,
@@ -210,24 +213,17 @@ public sealed class AttendanceActionExecutionService
                     cancellationToken);
             }
 
-            var finalState =
-                providerResult.Success
-                    ? AttendanceActionState.Succeeded
-                    : AttendanceActionState.Failed;
-
-            var finalStatus =
-                providerResult.Success
-                    ? AttendanceActionExecutionStatus.Succeeded
-                    : AttendanceActionExecutionStatus.ProviderRejected;
+            var mapped =
+                MapProviderResult(providerResult);
 
             return await SaveFinalStateAsync(
                 actionType,
                 evaluation.AttendanceDate,
                 inProgressRecord,
-                finalState,
-                finalStatus,
-                providerRequestSent: true,
-                providerConfirmed: providerResult.Success,
+                mapped.FinalState,
+                mapped.FinalStatus,
+                mapped.ProviderRequestSent,
+                mapped.ProviderConfirmed,
                 cancellationToken);
         }
         finally
@@ -247,10 +243,11 @@ public sealed class AttendanceActionExecutionService
         CancellationToken cancellationToken)
     {
         var finalRecord =
-            SetActionState(
+            SetActionOutcome(
                 inProgressRecord,
                 actionType,
-                finalState);
+                finalState,
+                providerRequestSent);
 
         try
         {
@@ -279,14 +276,19 @@ public sealed class AttendanceActionExecutionService
     private static bool IsEligible(
         AttendanceStateEvaluation evaluation,
         AttendanceActionType actionType,
-        AttendanceActionExecutionMode executionMode)
+        AttendanceActionExecutionMode executionMode,
+        DailyAttendanceRecord? currentRecord)
     {
         return executionMode switch
         {
             AttendanceActionExecutionMode.Notification =>
                 IsNotificationEligible(
                     evaluation,
-                    actionType),
+                    actionType) ||
+                IsNotificationSafeRetryEligible(
+                    evaluation,
+                    actionType,
+                    currentRecord),
 
             AttendanceActionExecutionMode.Manual =>
                 IsManualEligible(
@@ -316,6 +318,24 @@ public sealed class AttendanceActionExecutionService
 
             _ => false
         };
+    }
+
+    private static bool IsNotificationSafeRetryEligible(
+        AttendanceStateEvaluation evaluation,
+        AttendanceActionType actionType,
+        DailyAttendanceRecord? currentRecord)
+    {
+        if (currentRecord is null)
+        {
+            return false;
+        }
+
+        // Notification retry for Failed is only the guarded ManualRetry path,
+        // and only when persisted proof shows the punch POST never began.
+        return IsManualRetryEligible(evaluation, actionType) &&
+               AttendanceActionRecovery.HasProvenPreSendFailure(
+                   currentRecord,
+                   actionType);
     }
 
     private static bool IsManualEligible(
@@ -386,6 +406,59 @@ public sealed class AttendanceActionExecutionService
 
             _ => record
         };
+    }
+
+    private static DailyAttendanceRecord SetActionOutcome(
+        DailyAttendanceRecord record,
+        AttendanceActionType actionType,
+        AttendanceActionState state,
+        bool providerRequestSent)
+    {
+        return actionType switch
+        {
+            AttendanceActionType.ClockIn =>
+                record with
+                {
+                    ClockInState = state,
+                    ClockInProviderRequestSent = providerRequestSent
+                },
+
+            AttendanceActionType.ClockOut =>
+                record with
+                {
+                    ClockOutState = state,
+                    ClockOutProviderRequestSent = providerRequestSent
+                },
+
+            _ => record
+        };
+    }
+
+    private static (
+        AttendanceActionState FinalState,
+        AttendanceActionExecutionStatus FinalStatus,
+        bool ProviderRequestSent,
+        bool ProviderConfirmed) MapProviderResult(
+        ProviderResult providerResult)
+    {
+        if (providerResult.Success)
+        {
+            return (
+                AttendanceActionState.Succeeded,
+                AttendanceActionExecutionStatus.Succeeded,
+                ProviderRequestSent: true,
+                ProviderConfirmed: true);
+        }
+
+        // null = provider did not report boundary → conservative may-have-been-sent
+        var providerRequestSent =
+            providerResult.ProviderRequestSent != false;
+
+        return (
+            AttendanceActionState.Failed,
+            AttendanceActionExecutionStatus.ProviderRejected,
+            ProviderRequestSent: providerRequestSent,
+            ProviderConfirmed: false);
     }
 
     private static AttendanceActionExecutionResult Result(

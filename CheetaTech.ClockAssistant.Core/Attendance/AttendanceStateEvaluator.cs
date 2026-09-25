@@ -96,13 +96,18 @@ public sealed class AttendanceStateEvaluator
             clockInState,
             clockOutState,
             ClockInNotificationEligible:
-                clockInState == AttendanceActionState.Due &&
+                (clockInState == AttendanceActionState.Due ||
+                 (clockInState == AttendanceActionState.Failed &&
+                  currentRecord.ClockInProviderRequestSent == false)) &&
                 !clockOutReminderDue,
             ClockOutNotificationEligible:
                 clockOutReminderDue &&
                 currentRecord.ClockOutState != AttendanceActionState.Succeeded &&
                 currentRecord.ClockOutState != AttendanceActionState.InProgress &&
-                currentRecord.ClockOutState != AttendanceActionState.Skipped);
+                currentRecord.ClockOutState != AttendanceActionState.Skipped &&
+                currentRecord.ClockOutState != AttendanceActionState.Unknown &&
+                (currentRecord.ClockOutState != AttendanceActionState.Failed ||
+                 currentRecord.ClockOutProviderRequestSent == false));
     }
 
     private static AttendanceActionState EvaluateActionState(
