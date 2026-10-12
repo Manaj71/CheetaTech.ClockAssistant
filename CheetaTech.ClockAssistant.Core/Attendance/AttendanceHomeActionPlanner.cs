@@ -17,6 +17,11 @@ public static class AttendanceHomeActionPlanner
 {
     public static AttendanceHomeActionPlan Plan(
         AttendanceStateEvaluation evaluation)
+        => Plan(evaluation, record: null);
+
+    public static AttendanceHomeActionPlan Plan(
+        AttendanceStateEvaluation evaluation,
+        DailyAttendanceRecord? record)
     {
         if (evaluation.DayState == AttendanceDayState.NotScheduled)
         {
@@ -25,14 +30,10 @@ public static class AttendanceHomeActionPlanner
 
         if (evaluation.ClockInState == AttendanceActionState.Failed)
         {
-            return new AttendanceHomeActionPlan(
+            return PlanFailedAction(
                 AttendanceActionType.ClockIn,
-                AttendanceHomePrimaryActionMode.ManualRetry,
-                OfferCompletedElsewhere: true,
-                Summary:
-                    "Clock In needs attention." + Environment.NewLine +
-                    "The provider did not confirm it." + Environment.NewLine +
-                    "Check UKG status before retrying.");
+                record,
+                actionLabel: "Clock In");
         }
 
         if (evaluation.ClockInState == AttendanceActionState.Unknown)
@@ -41,9 +42,7 @@ public static class AttendanceHomeActionPlanner
                 AttendanceActionType.ClockIn,
                 AttendanceHomePrimaryActionMode.None,
                 OfferCompletedElsewhere: true,
-                Summary:
-                    "Status uncertain." + Environment.NewLine +
-                    "Check UKG before taking another provider action.");
+                Summary: UncertainSummary());
         }
 
         if (evaluation.ClockInState is AttendanceActionState.NotDue or AttendanceActionState.Due)
@@ -59,14 +58,10 @@ public static class AttendanceHomeActionPlanner
         {
             if (evaluation.ClockOutState == AttendanceActionState.Failed)
             {
-                return new AttendanceHomeActionPlan(
+                return PlanFailedAction(
                     AttendanceActionType.ClockOut,
-                    AttendanceHomePrimaryActionMode.ManualRetry,
-                    OfferCompletedElsewhere: true,
-                    Summary:
-                        "Clock Out needs attention." + Environment.NewLine +
-                        "The provider did not confirm it." + Environment.NewLine +
-                        "Check UKG status before retrying.");
+                    record,
+                    actionLabel: "Clock Out");
             }
 
             if (evaluation.ClockOutState == AttendanceActionState.Unknown)
@@ -75,9 +70,7 @@ public static class AttendanceHomeActionPlanner
                     AttendanceActionType.ClockOut,
                     AttendanceHomePrimaryActionMode.None,
                     OfferCompletedElsewhere: true,
-                    Summary:
-                        "Status uncertain." + Environment.NewLine +
-                        "Check UKG before taking another provider action.");
+                    Summary: UncertainSummary());
             }
 
             if (evaluation.ClockOutState is AttendanceActionState.NotDue or AttendanceActionState.Due)
@@ -115,6 +108,40 @@ public static class AttendanceHomeActionPlanner
             _ => false
         };
     }
+
+    private static AttendanceHomeActionPlan PlanFailedAction(
+        AttendanceActionType actionType,
+        DailyAttendanceRecord? record,
+        string actionLabel)
+    {
+        var provenPreSend =
+            record is not null &&
+            AttendanceActionRecovery.HasProvenPreSendFailure(
+                record,
+                actionType);
+
+        if (provenPreSend)
+        {
+            return new AttendanceHomeActionPlan(
+                actionType,
+                AttendanceHomePrimaryActionMode.ManualRetry,
+                OfferCompletedElsewhere: true,
+                Summary:
+                    $"The {actionLabel} request was not sent to UKG. You can retry.");
+        }
+
+        // Failed without proven pre-send (true, null, or missing record):
+        // offer Completed Elsewhere only — never ordinary ManualRetry.
+        return new AttendanceHomeActionPlan(
+            actionType,
+            AttendanceHomePrimaryActionMode.None,
+            OfferCompletedElsewhere: true,
+            Summary: UncertainSummary());
+    }
+
+    private static string UncertainSummary()
+        => "UKG has not confirmed this action. The request may have been processed. " +
+           "Check your attendance in the UKG app or portal before taking further action.";
 
     private static AttendanceHomeActionPlan None(string summary)
         => new(

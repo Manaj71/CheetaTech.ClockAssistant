@@ -165,15 +165,10 @@ public partial class MainPage : ContentPage
                 ? "Clock In"
                 : "Clock Out";
 
-        var alreadyState =
-            actionType == AttendanceActionType.ClockIn
-                ? "Clocked In"
-                : "Clocked Out";
-
         var confirm = await DisplayAlert(
             $"Retry {actionName}?",
-            $"Only retry if UKG shows you are not already {alreadyState}." + Environment.NewLine +
-            $"This will send another {actionName} request to UKG.",
+            $"The previous {actionName} request was not sent to UKG." + Environment.NewLine +
+            $"This will send a {actionName} request to UKG.",
             "Retry",
             "Cancel");
 
@@ -323,7 +318,9 @@ public partial class MainPage : ContentPage
                 currentRecord);
 
         var plan =
-            AttendanceHomeActionPlanner.Plan(evaluation);
+            AttendanceHomeActionPlanner.Plan(
+                evaluation,
+                currentRecord);
 
         var attendanceDateText =
             evaluation.AttendanceDate.ToString(

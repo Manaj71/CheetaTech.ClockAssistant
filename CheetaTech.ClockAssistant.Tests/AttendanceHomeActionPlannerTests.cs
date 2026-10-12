@@ -6,84 +6,149 @@ namespace CheetaTech.ClockAssistant.Tests;
 public sealed class AttendanceHomeActionPlannerTests
 {
     [Fact]
-    public void Plan_FailedClockIn_OffersRetryAndCompletedElsewhere()
+    public void Plan_FailedClockIn_ProvenPreSend_OffersRetryAndCompletedElsewhere()
+    {
+        var record = new DailyAttendanceRecord
+        {
+            AttendanceDate = AttendanceDate,
+            ClockInState = AttendanceActionState.Failed,
+            ClockInProviderRequestSent = false
+        };
+
+        var evaluation = Evaluate(record, ClockInDueUtc);
+        var plan = AttendanceHomeActionPlanner.Plan(evaluation, record);
+
+        Assert.Equal(AttendanceActionType.ClockIn, plan.ActionType);
+        Assert.Equal(AttendanceHomePrimaryActionMode.ManualRetry, plan.PrimaryMode);
+        Assert.True(plan.OfferCompletedElsewhere);
+        Assert.Contains(
+            "was not sent to UKG",
+            plan.Summary,
+            StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(null)]
+    public void Plan_FailedClockIn_PostSendOrUnknownBoundary_OffersCompletedElsewhereWithoutRetry(
+        bool? providerRequestSent)
+    {
+        var record = new DailyAttendanceRecord
+        {
+            AttendanceDate = AttendanceDate,
+            ClockInState = AttendanceActionState.Failed,
+            ClockInProviderRequestSent = providerRequestSent
+        };
+
+        var evaluation = Evaluate(record, ClockInDueUtc);
+        var plan = AttendanceHomeActionPlanner.Plan(evaluation, record);
+
+        Assert.Equal(AttendanceActionType.ClockIn, plan.ActionType);
+        Assert.Equal(AttendanceHomePrimaryActionMode.None, plan.PrimaryMode);
+        Assert.True(plan.OfferCompletedElsewhere);
+        Assert.Contains(
+            "may have been processed",
+            plan.Summary,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Plan_FailedClockIn_WithoutRecord_DoesNotOfferManualRetry()
     {
         var evaluation = Evaluate(
             new DailyAttendanceRecord
             {
                 AttendanceDate = AttendanceDate,
-                ClockInState = AttendanceActionState.Failed
+                ClockInState = AttendanceActionState.Failed,
+                ClockInProviderRequestSent = false
             },
             ClockInDueUtc);
 
+        // Missing record argument cannot prove pre-send failure.
         var plan = AttendanceHomeActionPlanner.Plan(evaluation);
 
-        Assert.Equal(AttendanceActionType.ClockIn, plan.ActionType);
-        Assert.Equal(AttendanceHomePrimaryActionMode.ManualRetry, plan.PrimaryMode);
+        Assert.Equal(AttendanceHomePrimaryActionMode.None, plan.PrimaryMode);
         Assert.True(plan.OfferCompletedElsewhere);
-        Assert.Contains("Clock In needs attention", plan.Summary, StringComparison.Ordinal);
-        Assert.DoesNotContain(
-            "No attendance action is currently required",
-            plan.Summary,
-            StringComparison.Ordinal);
     }
 
     [Fact]
     public void Plan_UnknownClockIn_OffersCompletedElsewhereWithoutRetry()
     {
-        var evaluation = Evaluate(
-            new DailyAttendanceRecord
-            {
-                AttendanceDate = AttendanceDate,
-                ClockInState = AttendanceActionState.Unknown
-            },
-            ClockInDueUtc);
+        var record = new DailyAttendanceRecord
+        {
+            AttendanceDate = AttendanceDate,
+            ClockInState = AttendanceActionState.Unknown
+        };
 
-        var plan = AttendanceHomeActionPlanner.Plan(evaluation);
+        var evaluation = Evaluate(record, ClockInDueUtc);
+        var plan = AttendanceHomeActionPlanner.Plan(evaluation, record);
 
         Assert.Equal(AttendanceActionType.ClockIn, plan.ActionType);
         Assert.Equal(AttendanceHomePrimaryActionMode.None, plan.PrimaryMode);
         Assert.True(plan.OfferCompletedElsewhere);
-        Assert.Contains("Status uncertain", plan.Summary, StringComparison.Ordinal);
         Assert.Contains(
-            "Check UKG before taking another provider action",
+            "may have been processed",
             plan.Summary,
             StringComparison.Ordinal);
     }
 
     [Fact]
-    public void Plan_FailedClockOut_OffersRetryAndCompletedElsewhere()
+    public void Plan_FailedClockOut_ProvenPreSend_OffersRetryAndCompletedElsewhere()
     {
-        var evaluation = Evaluate(
-            new DailyAttendanceRecord
-            {
-                AttendanceDate = AttendanceDate,
-                ClockInState = AttendanceActionState.Succeeded,
-                ClockOutState = AttendanceActionState.Failed
-            },
-            ClockOutDueUtc);
+        var record = new DailyAttendanceRecord
+        {
+            AttendanceDate = AttendanceDate,
+            ClockInState = AttendanceActionState.Succeeded,
+            ClockOutState = AttendanceActionState.Failed,
+            ClockOutProviderRequestSent = false
+        };
 
-        var plan = AttendanceHomeActionPlanner.Plan(evaluation);
+        var evaluation = Evaluate(record, ClockOutDueUtc);
+        var plan = AttendanceHomeActionPlanner.Plan(evaluation, record);
 
         Assert.Equal(AttendanceActionType.ClockOut, plan.ActionType);
         Assert.Equal(AttendanceHomePrimaryActionMode.ManualRetry, plan.PrimaryMode);
         Assert.True(plan.OfferCompletedElsewhere);
-        Assert.Contains("Clock Out needs attention", plan.Summary, StringComparison.Ordinal);
+        Assert.Contains(
+            "was not sent to UKG",
+            plan.Summary,
+            StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(null)]
+    public void Plan_FailedClockOut_PostSendOrUnknownBoundary_OffersCompletedElsewhereWithoutRetry(
+        bool? providerRequestSent)
+    {
+        var record = new DailyAttendanceRecord
+        {
+            AttendanceDate = AttendanceDate,
+            ClockInState = AttendanceActionState.Succeeded,
+            ClockOutState = AttendanceActionState.Failed,
+            ClockOutProviderRequestSent = providerRequestSent
+        };
+
+        var evaluation = Evaluate(record, ClockOutDueUtc);
+        var plan = AttendanceHomeActionPlanner.Plan(evaluation, record);
+
+        Assert.Equal(AttendanceActionType.ClockOut, plan.ActionType);
+        Assert.Equal(AttendanceHomePrimaryActionMode.None, plan.PrimaryMode);
+        Assert.True(plan.OfferCompletedElsewhere);
     }
 
     [Fact]
     public void Plan_UnknownClockOut_OffersCompletedElsewhereWithoutRetry()
     {
-        var evaluation = Evaluate(
-            new DailyAttendanceRecord
-            {
-                AttendanceDate = AttendanceDate,
-                ClockInState = AttendanceActionState.Succeeded,
-                ClockOutState = AttendanceActionState.Unknown
-            },
-            ClockOutDueUtc);
+        var record = new DailyAttendanceRecord
+        {
+            AttendanceDate = AttendanceDate,
+            ClockInState = AttendanceActionState.Succeeded,
+            ClockOutState = AttendanceActionState.Unknown
+        };
 
-        var plan = AttendanceHomeActionPlanner.Plan(evaluation);
+        var evaluation = Evaluate(record, ClockOutDueUtc);
+        var plan = AttendanceHomeActionPlanner.Plan(evaluation, record);
 
         Assert.Equal(AttendanceActionType.ClockOut, plan.ActionType);
         Assert.Equal(AttendanceHomePrimaryActionMode.None, plan.PrimaryMode);
@@ -202,7 +267,8 @@ public sealed class AttendanceHomeActionPlannerTests
         var record = new DailyAttendanceRecord
         {
             AttendanceDate = AttendanceDate,
-            ClockInState = AttendanceActionState.Failed
+            ClockInState = AttendanceActionState.Failed,
+            ClockInProviderRequestSent = true
         };
 
         Assert.True(
@@ -217,7 +283,7 @@ public sealed class AttendanceHomeActionPlannerTests
         };
 
         var evaluation = Evaluate(updated, ClockOutDueUtc);
-        var plan = AttendanceHomeActionPlanner.Plan(evaluation);
+        var plan = AttendanceHomeActionPlanner.Plan(evaluation, updated);
 
         Assert.Equal(AttendanceActionType.ClockOut, plan.ActionType);
         Assert.Equal(AttendanceHomePrimaryActionMode.Manual, plan.PrimaryMode);
@@ -236,7 +302,8 @@ public sealed class AttendanceHomeActionPlannerTests
         {
             AttendanceDate = AttendanceDate,
             ClockInState = AttendanceActionState.Succeeded,
-            ClockOutState = AttendanceActionState.Failed
+            ClockOutState = AttendanceActionState.Failed,
+            ClockOutProviderRequestSent = true
         };
 
         Assert.True(
@@ -251,7 +318,7 @@ public sealed class AttendanceHomeActionPlannerTests
         };
 
         var evaluation = Evaluate(updated, ClockOutDueUtc);
-        var plan = AttendanceHomeActionPlanner.Plan(evaluation);
+        var plan = AttendanceHomeActionPlanner.Plan(evaluation, updated);
 
         Assert.Null(plan.ActionType);
         Assert.Equal(AttendanceHomePrimaryActionMode.None, plan.PrimaryMode);

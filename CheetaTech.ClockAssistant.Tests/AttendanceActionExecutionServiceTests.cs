@@ -193,12 +193,18 @@ public sealed class AttendanceActionExecutionServiceTests
 
         Assert.True(evaluation.ClockInNotificationEligible);
 
-        var plan = AttendanceHomeActionPlanner.Plan(evaluation);
+        var plan = AttendanceHomeActionPlanner.Plan(
+            evaluation,
+            stateStore.SavedRecords[^1]);
 
         Assert.Equal(AttendanceActionType.ClockIn, plan.ActionType);
         Assert.Equal(
             AttendanceHomePrimaryActionMode.ManualRetry,
             plan.PrimaryMode);
+        Assert.Contains(
+            "was not sent to UKG",
+            plan.Summary,
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -299,15 +305,32 @@ public sealed class AttendanceActionExecutionServiceTests
             retry.Status);
         Assert.Equal(0, provider.ClockInCallCount);
 
-        // Guarded Home ManualRetry remains available for Failed.
+        // Post-send Failed: Home ManualRetry is not offered; CE remains.
         var evaluation = new AttendanceStateEvaluator().Evaluate(
             Configuration(),
             ClockInDueUtc,
             stateStore.SavedRecords[^1]);
 
+        var plan = AttendanceHomeActionPlanner.Plan(
+            evaluation,
+            stateStore.SavedRecords[^1]);
+
+        Assert.Equal(AttendanceHomePrimaryActionMode.None, plan.PrimaryMode);
+        Assert.True(plan.OfferCompletedElsewhere);
+        Assert.Contains(
+            "may have been processed",
+            plan.Summary,
+            StringComparison.Ordinal);
+
+        var homeRetry = await service.ExecuteAsync(
+            AttendanceActionType.ClockIn,
+            ClockInDueUtc,
+            AttendanceActionExecutionMode.ManualRetry);
+
         Assert.Equal(
-            AttendanceHomePrimaryActionMode.ManualRetry,
-            AttendanceHomeActionPlanner.Plan(evaluation).PrimaryMode);
+            AttendanceActionExecutionStatus.NotEligible,
+            homeRetry.Status);
+        Assert.Equal(0, provider.ClockInCallCount);
     }
 
     [Fact]
@@ -349,7 +372,9 @@ public sealed class AttendanceActionExecutionServiceTests
         Assert.NotEqual(AttendanceDayState.Completed, evaluation.DayState);
         Assert.True(evaluation.ClockOutNotificationEligible);
 
-        var plan = AttendanceHomeActionPlanner.Plan(evaluation);
+        var plan = AttendanceHomeActionPlanner.Plan(
+            evaluation,
+            stateStore.SavedRecords[^1]);
 
         Assert.Equal(AttendanceActionType.ClockOut, plan.ActionType);
         Assert.Equal(
@@ -443,16 +468,21 @@ public sealed class AttendanceActionExecutionServiceTests
             ClockOutDueUtc,
             stateStore.SavedRecords[^1]);
 
-        var plan = AttendanceHomeActionPlanner.Plan(evaluation);
+        var plan = AttendanceHomeActionPlanner.Plan(
+            evaluation,
+            stateStore.SavedRecords[^1]);
 
         Assert.Equal(AttendanceActionType.ClockOut, plan.ActionType);
         Assert.Equal(AttendanceHomePrimaryActionMode.None, plan.PrimaryMode);
         Assert.True(plan.OfferCompletedElsewhere);
-        Assert.Contains("Status uncertain", plan.Summary, StringComparison.Ordinal);
+        Assert.Contains(
+            "may have been processed",
+            plan.Summary,
+            StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task ExecuteAsync_SentExplicitRejection_NotificationClearsHomeKeepsGuardedRetry()
+    public async Task ExecuteAsync_SentExplicitRejection_NotificationClearsHomeBlocksOrdinaryRetry()
     {
         var provider = FakeProvider.Rejected();
         var stateStore = new FakeAttendanceStateStore();
@@ -481,11 +511,22 @@ public sealed class AttendanceActionExecutionServiceTests
             ClockInDueUtc,
             stateStore.SavedRecords[^1]);
 
-        var plan = AttendanceHomeActionPlanner.Plan(evaluation);
+        var plan = AttendanceHomeActionPlanner.Plan(
+            evaluation,
+            stateStore.SavedRecords[^1]);
+
+        Assert.Equal(AttendanceHomePrimaryActionMode.None, plan.PrimaryMode);
+        Assert.True(plan.OfferCompletedElsewhere);
+
+        var homeRetry = await service.ExecuteAsync(
+            AttendanceActionType.ClockIn,
+            ClockInDueUtc,
+            AttendanceActionExecutionMode.ManualRetry);
 
         Assert.Equal(
-            AttendanceHomePrimaryActionMode.ManualRetry,
-            plan.PrimaryMode);
+            AttendanceActionExecutionStatus.NotEligible,
+            homeRetry.Status);
+        Assert.Equal(1, provider.ClockInCallCount);
     }
 
     [Fact]
@@ -882,7 +923,8 @@ public sealed class AttendanceActionExecutionServiceTests
             new DailyAttendanceRecord
             {
                 AttendanceDate = AttendanceDate,
-                ClockInState = AttendanceActionState.Failed
+                ClockInState = AttendanceActionState.Failed,
+                ClockInProviderRequestSent = false
             });
 
         var service = CreateService(provider, stateStore);
@@ -912,7 +954,8 @@ public sealed class AttendanceActionExecutionServiceTests
             new DailyAttendanceRecord
             {
                 AttendanceDate = AttendanceDate,
-                ClockInState = AttendanceActionState.Failed
+                ClockInState = AttendanceActionState.Failed,
+                ClockInProviderRequestSent = false
             });
 
         var service = CreateService(provider, stateStore);
@@ -931,6 +974,79 @@ public sealed class AttendanceActionExecutionServiceTests
         Assert.Equal(
             AttendanceActionState.Failed,
             stateStore.SavedRecords[^1].ClockInState);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(null)]
+    public async Task ExecuteAsync_ManualRetryClockInPostSendOrUnknownBoundary_DoesNotCallProvider(
+        bool? providerRequestSent)
+    {
+        var provider = FakeProvider.Success();
+        var stateStore = new FakeAttendanceStateStore(
+            new DailyAttendanceRecord
+            {
+                AttendanceDate = AttendanceDate,
+                ClockInState = AttendanceActionState.Failed,
+                ClockInProviderRequestSent = providerRequestSent
+            });
+
+        var service = CreateService(provider, stateStore);
+
+        var result = await service.ExecuteAsync(
+            AttendanceActionType.ClockIn,
+            ClockInDueUtc,
+            AttendanceActionExecutionMode.ManualRetry);
+
+        Assert.Equal(
+            AttendanceActionExecutionStatus.NotEligible,
+            result.Status);
+        Assert.Equal(0, provider.ClockInCallCount);
+        Assert.Empty(stateStore.SavedRecords);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_UnknownProviderResponseMappedFailed_DoesNotPermitHomeManualRetry()
+    {
+        var provider = FakeProvider.RejectedUnknownProviderResponse();
+        var stateStore = new FakeAttendanceStateStore();
+        var service = CreateService(provider, stateStore);
+
+        var result = await service.ExecuteAsync(
+            AttendanceActionType.ClockIn,
+            ClockInDueUtc);
+
+        Assert.Equal(
+            AttendanceActionExecutionStatus.ProviderRejected,
+            result.Status);
+        Assert.True(result.ProviderRequestSent);
+        Assert.Equal(
+            AttendanceActionState.Failed,
+            stateStore.SavedRecords[^1].ClockInState);
+        Assert.True(
+            stateStore.SavedRecords[^1].ClockInProviderRequestSent);
+
+        var evaluation = new AttendanceStateEvaluator().Evaluate(
+            Configuration(),
+            ClockInDueUtc,
+            stateStore.SavedRecords[^1]);
+
+        var plan = AttendanceHomeActionPlanner.Plan(
+            evaluation,
+            stateStore.SavedRecords[^1]);
+
+        Assert.Equal(AttendanceHomePrimaryActionMode.None, plan.PrimaryMode);
+        Assert.True(plan.OfferCompletedElsewhere);
+
+        var homeRetry = await service.ExecuteAsync(
+            AttendanceActionType.ClockIn,
+            ClockInDueUtc,
+            AttendanceActionExecutionMode.ManualRetry);
+
+        Assert.Equal(
+            AttendanceActionExecutionStatus.NotEligible,
+            homeRetry.Status);
+        Assert.Equal(1, provider.ClockInCallCount);
     }
 
     [Theory]
@@ -1001,7 +1117,8 @@ public sealed class AttendanceActionExecutionServiceTests
             {
                 AttendanceDate = AttendanceDate,
                 ClockInState = AttendanceActionState.Succeeded,
-                ClockOutState = AttendanceActionState.Failed
+                ClockOutState = AttendanceActionState.Failed,
+                ClockOutProviderRequestSent = false
             });
 
         var service = CreateService(provider, stateStore);
@@ -1628,6 +1745,13 @@ public sealed class AttendanceActionExecutionServiceTests
 
         public static FakeProvider Rejected()
             => new(false, false, providerRequestSent: true);
+
+        public static FakeProvider RejectedUnknownProviderResponse()
+            => new(
+                false,
+                false,
+                providerRequestSent: true,
+                failureTechnicalStatus: "UnknownProviderResponse");
 
         public static FakeProvider RejectedPreSend()
             => new(false, false, providerRequestSent: false, failureTechnicalStatus: "NetworkUnavailable");

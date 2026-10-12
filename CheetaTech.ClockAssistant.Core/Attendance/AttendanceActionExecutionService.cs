@@ -106,7 +106,9 @@ public sealed class AttendanceActionExecutionService
                     currentRecord);
 
             var freshPlan =
-                AttendanceHomeActionPlanner.Plan(freshEvaluation);
+                AttendanceHomeActionPlanner.Plan(
+                    freshEvaluation,
+                    currentRecord);
 
             if (!freshPlan.OfferCompletedElsewhere ||
                 freshPlan.ActionType != actionType ||
@@ -412,7 +414,8 @@ public sealed class AttendanceActionExecutionService
             AttendanceActionExecutionMode.ManualRetry =>
                 IsManualRetryEligible(
                     evaluation,
-                    actionType),
+                    actionType,
+                    currentRecord),
 
             _ => false
         };
@@ -444,12 +447,11 @@ public sealed class AttendanceActionExecutionService
             return false;
         }
 
-        // Notification retry for Failed is only the guarded ManualRetry path,
-        // and only when persisted proof shows the punch POST never began.
-        return IsManualRetryEligible(evaluation, actionType) &&
-               AttendanceActionRecovery.HasProvenPreSendFailure(
-                   currentRecord,
-                   actionType);
+        // Notification retry shares the same proven pre-send ManualRetry gate.
+        return IsManualRetryEligible(
+            evaluation,
+            actionType,
+            currentRecord);
     }
 
     private static bool IsManualEligible(
@@ -479,14 +481,20 @@ public sealed class AttendanceActionExecutionService
 
     private static bool IsManualRetryEligible(
         AttendanceStateEvaluation evaluation,
-        AttendanceActionType actionType)
+        AttendanceActionType actionType,
+        DailyAttendanceRecord? currentRecord)
     {
         if (evaluation.DayState == AttendanceDayState.NotScheduled)
         {
             return false;
         }
 
-        return actionType switch
+        if (currentRecord is null)
+        {
+            return false;
+        }
+
+        var failedEligible = actionType switch
         {
             AttendanceActionType.ClockIn =>
                 evaluation.ClockInState == AttendanceActionState.Failed,
@@ -497,6 +505,11 @@ public sealed class AttendanceActionExecutionService
 
             _ => false
         };
+
+        return failedEligible &&
+               AttendanceActionRecovery.HasProvenPreSendFailure(
+                   currentRecord,
+                   actionType);
     }
 
     private static DailyAttendanceRecord SetActionState(
