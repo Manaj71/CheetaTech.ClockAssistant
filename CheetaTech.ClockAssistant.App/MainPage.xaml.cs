@@ -489,67 +489,29 @@ public partial class MainPage : ContentPage
             return;
         }
 
+        // Confirmation completes before exclusive attendance access so the
+        // shared execution gate is never held across the dialog.
         var utcNow = DateTimeOffset.UtcNow;
-        var configuration = await _configurationStore.GetAsync();
-        if (configuration is null)
+        var result =
+            await _executionService.MarkCompletedElsewhereAsync(
+                actionType,
+                utcNow);
+
+        if (result.Status == AttendanceCompletedElsewhereStatus.Succeeded)
         {
-            _resultLabel.Text = "Attendance configuration is unavailable.";
+            await TryCancelStaleAttendanceNotificationAsync(actionType);
+            await TryScheduleReminderAsync(actionType, utcNow);
+            _resultLabel.Text = $"{actionName} marked completed elsewhere.";
             _resultLabel.IsVisible = true;
             await RefreshStateAsync();
             return;
         }
 
-        var evaluation = _stateEvaluator.Evaluate(configuration, utcNow);
-        var currentRecord = await _attendanceStateStore.LoadAsync(evaluation.AttendanceDate);
-        if (currentRecord is null || currentRecord.AttendanceDate != evaluation.AttendanceDate)
-        {
-            currentRecord = new DailyAttendanceRecord { AttendanceDate = evaluation.AttendanceDate };
-        }
+        _resultLabel.Text =
+            result.Status == AttendanceCompletedElsewhereStatus.MissingConfiguration
+                ? "Attendance configuration is unavailable."
+                : $"{actionName} could not be marked completed elsewhere safely.";
 
-        var freshEvaluation = _stateEvaluator.Evaluate(configuration, utcNow, currentRecord);
-        var freshPlan = AttendanceHomeActionPlanner.Plan(freshEvaluation);
-
-        if (!freshPlan.OfferCompletedElsewhere ||
-            freshPlan.ActionType != actionType ||
-            !AttendanceHomeActionPlanner.IsSafeCompletedElsewhere(actionType, currentRecord))
-        {
-            _resultLabel.Text =
-                $"{actionName} could not be marked completed elsewhere safely.";
-
-            _resultLabel.IsVisible = true;
-
-            await RefreshStateAsync();
-            return;
-        }
-
-        var updatedRecord = actionType switch
-        {
-            AttendanceActionType.ClockIn =>
-                currentRecord with
-                {
-                    ClockInState = AttendanceActionState.Succeeded,
-                    ClockInCompletionSource = AttendanceActionCompletionSource.CompletedElsewhere
-                },
-            AttendanceActionType.ClockOut =>
-                currentRecord with
-                {
-                    ClockOutState = AttendanceActionState.Succeeded,
-                    ClockOutCompletionSource = AttendanceActionCompletionSource.CompletedElsewhere
-                },
-            _ => currentRecord
-        };
-
-        if (ReferenceEquals(updatedRecord, currentRecord))
-        {
-            _resultLabel.Text = $"{actionName} could not be marked completed elsewhere safely.";
-            _resultLabel.IsVisible = true;
-            return;
-        }
-
-        await _attendanceStateStore.SaveAsync(updatedRecord);
-        await TryCancelStaleAttendanceNotificationAsync(actionType);
-        await TryScheduleReminderAsync(actionType, utcNow);
-        _resultLabel.Text = $"{actionName} marked completed elsewhere.";
         _resultLabel.IsVisible = true;
         await RefreshStateAsync();
     }

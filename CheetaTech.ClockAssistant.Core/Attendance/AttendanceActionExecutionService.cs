@@ -60,6 +60,120 @@ public sealed class AttendanceActionExecutionService
             cancellationToken);
     }
 
+    public async Task<AttendanceCompletedElsewhereResult> MarkCompletedElsewhereAsync(
+        AttendanceActionType actionType,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken = default)
+    {
+        await _executionGate.WaitAsync(cancellationToken);
+
+        try
+        {
+            var configuration =
+                await _configurationStore.GetAsync(cancellationToken);
+
+            if (configuration is null)
+            {
+                return new AttendanceCompletedElsewhereResult(
+                    actionType,
+                    AttendanceCompletedElsewhereStatus.MissingConfiguration,
+                    AttendanceDate: null);
+            }
+
+            var dateEvaluation =
+                _stateEvaluator.Evaluate(
+                    configuration,
+                    utcNow);
+
+            var currentRecord =
+                await _attendanceStateStore.LoadAsync(
+                    dateEvaluation.AttendanceDate,
+                    cancellationToken);
+
+            if (currentRecord is null ||
+                currentRecord.AttendanceDate != dateEvaluation.AttendanceDate)
+            {
+                currentRecord = new DailyAttendanceRecord
+                {
+                    AttendanceDate = dateEvaluation.AttendanceDate
+                };
+            }
+
+            var freshEvaluation =
+                _stateEvaluator.Evaluate(
+                    configuration,
+                    utcNow,
+                    currentRecord);
+
+            var freshPlan =
+                AttendanceHomeActionPlanner.Plan(freshEvaluation);
+
+            if (!freshPlan.OfferCompletedElsewhere ||
+                freshPlan.ActionType != actionType ||
+                !AttendanceHomeActionPlanner.IsSafeCompletedElsewhere(
+                    actionType,
+                    currentRecord))
+            {
+                return new AttendanceCompletedElsewhereResult(
+                    actionType,
+                    AttendanceCompletedElsewhereStatus.NotEligible,
+                    dateEvaluation.AttendanceDate);
+            }
+
+            var updatedRecord = actionType switch
+            {
+                AttendanceActionType.ClockIn =>
+                    currentRecord with
+                    {
+                        ClockInState = AttendanceActionState.Succeeded,
+                        ClockInCompletionSource =
+                            AttendanceActionCompletionSource.CompletedElsewhere
+                    },
+
+                AttendanceActionType.ClockOut =>
+                    currentRecord with
+                    {
+                        ClockOutState = AttendanceActionState.Succeeded,
+                        ClockOutCompletionSource =
+                            AttendanceActionCompletionSource.CompletedElsewhere
+                    },
+
+                _ => currentRecord
+            };
+
+            if (ReferenceEquals(updatedRecord, currentRecord))
+            {
+                return new AttendanceCompletedElsewhereResult(
+                    actionType,
+                    AttendanceCompletedElsewhereStatus.NotEligible,
+                    dateEvaluation.AttendanceDate);
+            }
+
+            try
+            {
+                await _attendanceStateStore.SaveAsync(
+                    updatedRecord,
+                    cancellationToken);
+            }
+            catch
+            {
+                return new AttendanceCompletedElsewhereResult(
+                    actionType,
+                    AttendanceCompletedElsewhereStatus.PersistenceFailed,
+                    dateEvaluation.AttendanceDate);
+            }
+
+            return new AttendanceCompletedElsewhereResult(
+                actionType,
+                AttendanceCompletedElsewhereStatus.Succeeded,
+                dateEvaluation.AttendanceDate);
+        }
+        finally
+        {
+            _executionGate.Release();
+        }
+    }
+
     public async Task<AttendanceActionExecutionResult> ExecuteAsync(
         AttendanceActionType actionType,
         DateTimeOffset utcNow,

@@ -1082,6 +1082,242 @@ public sealed class AttendanceActionExecutionServiceTests
         Assert.Empty(stateStore.SavedRecords);
     }
 
+    [Fact]
+    public async Task MarkCompletedElsewhereAsync_EligibleFailedClockIn_SucceedsWithoutProviderCall()
+    {
+        var provider = FakeProvider.Success();
+        var stateStore = new FakeAttendanceStateStore(
+            new DailyAttendanceRecord
+            {
+                AttendanceDate = AttendanceDate,
+                ClockInState = AttendanceActionState.Failed,
+                ClockInProviderRequestSent = true
+            });
+
+        var service = CreateService(provider, stateStore);
+
+        var result = await service.MarkCompletedElsewhereAsync(
+            AttendanceActionType.ClockIn,
+            ClockInDueUtc);
+
+        Assert.Equal(
+            AttendanceCompletedElsewhereStatus.Succeeded,
+            result.Status);
+        Assert.Equal(AttendanceDate, result.AttendanceDate);
+        Assert.Equal(0, provider.ClockInCallCount);
+        Assert.Equal(0, provider.ClockOutCallCount);
+
+        var saved = Assert.Single(stateStore.SavedRecords);
+        Assert.Equal(AttendanceActionState.Succeeded, saved.ClockInState);
+        Assert.Equal(
+            AttendanceActionCompletionSource.CompletedElsewhere,
+            saved.ClockInCompletionSource);
+    }
+
+    [Theory]
+    [InlineData(AttendanceActionState.InProgress)]
+    [InlineData(AttendanceActionState.Succeeded)]
+    [InlineData(AttendanceActionState.Skipped)]
+    public async Task MarkCompletedElsewhereAsync_DisallowedClockInStates_AreRejected(
+        AttendanceActionState disallowedState)
+    {
+        var provider = FakeProvider.Success();
+        var stateStore = new FakeAttendanceStateStore(
+            new DailyAttendanceRecord
+            {
+                AttendanceDate = AttendanceDate,
+                ClockInState = disallowedState
+            });
+
+        var service = CreateService(provider, stateStore);
+
+        var result = await service.MarkCompletedElsewhereAsync(
+            AttendanceActionType.ClockIn,
+            ClockInDueUtc);
+
+        Assert.Equal(
+            AttendanceCompletedElsewhereStatus.NotEligible,
+            result.Status);
+        Assert.Equal(0, provider.ClockInCallCount);
+        Assert.Empty(stateStore.SavedRecords);
+    }
+
+    [Fact]
+    public async Task MarkCompletedElsewhereAsync_UnknownClockIn_RemainsEligibleCompletedElsewhere()
+    {
+        // Existing Completed Elsewhere eligibility allows Unknown recovery.
+        var provider = FakeProvider.Success();
+        var stateStore = new FakeAttendanceStateStore(
+            new DailyAttendanceRecord
+            {
+                AttendanceDate = AttendanceDate,
+                ClockInState = AttendanceActionState.Unknown
+            });
+
+        var service = CreateService(provider, stateStore);
+
+        var result = await service.MarkCompletedElsewhereAsync(
+            AttendanceActionType.ClockIn,
+            ClockInDueUtc);
+
+        Assert.Equal(
+            AttendanceCompletedElsewhereStatus.Succeeded,
+            result.Status);
+        Assert.Equal(0, provider.ClockInCallCount);
+        Assert.Equal(
+            AttendanceActionCompletionSource.CompletedElsewhere,
+            stateStore.SavedRecords[^1].ClockInCompletionSource);
+    }
+
+    [Fact]
+    public async Task MarkCompletedElsewhereAsync_DoesNotOverwriteInFlightProviderAction()
+    {
+        var provider = new BlockingFakeProvider();
+        var stateStore = new FakeAttendanceStateStore();
+        var service = CreateService(provider, stateStore);
+
+        var executeTask = service.ExecuteAsync(
+            AttendanceActionType.ClockIn,
+            ClockInDueUtc);
+
+        await provider.WaitUntilEnteredAsync();
+
+        Assert.Equal(
+            AttendanceActionState.InProgress,
+            stateStore.SavedRecords[^1].ClockInState);
+
+        var completedElsewhereTask = service.MarkCompletedElsewhereAsync(
+            AttendanceActionType.ClockIn,
+            ClockInDueUtc);
+
+        // CE must wait on the shared gate while provider execution is in flight.
+        Assert.False(completedElsewhereTask.IsCompleted);
+
+        provider.Release();
+
+        var executeResult = await executeTask;
+        var completedElsewhereResult = await completedElsewhereTask;
+
+        Assert.Equal(
+            AttendanceActionExecutionStatus.Succeeded,
+            executeResult.Status);
+        Assert.True(executeResult.ProviderConfirmed);
+        Assert.Equal(
+            AttendanceCompletedElsewhereStatus.NotEligible,
+            completedElsewhereResult.Status);
+        Assert.Equal(1, provider.ClockInCallCount);
+
+        var final = stateStore.SavedRecords[^1];
+        Assert.Equal(AttendanceActionState.Succeeded, final.ClockInState);
+        Assert.NotEqual(
+            AttendanceActionCompletionSource.CompletedElsewhere,
+            final.ClockInCompletionSource);
+    }
+
+    [Fact]
+    public async Task MarkCompletedElsewhereAsync_ReloadsStateUnderSharedGateAfterExecute()
+    {
+        var provider = FakeProvider.Success();
+        var stateStore = new FakeAttendanceStateStore(
+            new DailyAttendanceRecord
+            {
+                AttendanceDate = AttendanceDate,
+                ClockInState = AttendanceActionState.Failed,
+                ClockInProviderRequestSent = false
+            });
+
+        var service = CreateService(provider, stateStore);
+
+        // First succeed via provider so persisted state becomes Succeeded.
+        var executeResult = await service.ExecuteAsync(
+            AttendanceActionType.ClockIn,
+            ClockInDueUtc,
+            AttendanceActionExecutionMode.ManualRetry);
+
+        Assert.Equal(
+            AttendanceActionExecutionStatus.Succeeded,
+            executeResult.Status);
+
+        var loadCountBefore = stateStore.LoadCount;
+
+        var completedElsewhereResult =
+            await service.MarkCompletedElsewhereAsync(
+                AttendanceActionType.ClockIn,
+                ClockInDueUtc);
+
+        Assert.True(stateStore.LoadCount > loadCountBefore);
+        Assert.Equal(
+            AttendanceCompletedElsewhereStatus.NotEligible,
+            completedElsewhereResult.Status);
+        Assert.NotEqual(
+            AttendanceActionCompletionSource.CompletedElsewhere,
+            stateStore.SavedRecords[^1].ClockInCompletionSource);
+        Assert.Equal(1, provider.ClockInCallCount);
+    }
+
+    [Fact]
+    public async Task MarkCompletedElsewhereAsync_ConcurrentRequests_OnlyOneSucceeds()
+    {
+        var provider = FakeProvider.Success();
+        var stateStore = new FakeAttendanceStateStore(
+            new DailyAttendanceRecord
+            {
+                AttendanceDate = AttendanceDate,
+                ClockInState = AttendanceActionState.Failed
+            });
+
+        var service = CreateService(provider, stateStore);
+
+        var first = service.MarkCompletedElsewhereAsync(
+            AttendanceActionType.ClockIn,
+            ClockInDueUtc);
+        var second = service.MarkCompletedElsewhereAsync(
+            AttendanceActionType.ClockIn,
+            ClockInDueUtc);
+
+        var results = await Task.WhenAll(first, second);
+
+        Assert.Equal(1, results.Count(result =>
+            result.Status == AttendanceCompletedElsewhereStatus.Succeeded));
+        Assert.Equal(1, results.Count(result =>
+            result.Status == AttendanceCompletedElsewhereStatus.NotEligible));
+        Assert.Equal(0, provider.ClockInCallCount);
+
+        Assert.Single(
+            stateStore.SavedRecords,
+            record =>
+                record.ClockInCompletionSource ==
+                AttendanceActionCompletionSource.CompletedElsewhere);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ConcurrentDuplicateClockIn_CallsProviderOnce()
+    {
+        var provider = new BlockingFakeProvider();
+        var stateStore = new FakeAttendanceStateStore();
+        var service = CreateService(provider, stateStore);
+
+        var first = service.ExecuteAsync(
+            AttendanceActionType.ClockIn,
+            ClockInDueUtc);
+        var second = service.ExecuteAsync(
+            AttendanceActionType.ClockIn,
+            ClockInDueUtc);
+
+        await provider.WaitUntilEnteredAsync();
+        provider.Release();
+
+        var results = await Task.WhenAll(first, second);
+
+        Assert.Equal(1, provider.ClockInCallCount);
+        Assert.Contains(
+            results,
+            result => result.Status == AttendanceActionExecutionStatus.Succeeded);
+        Assert.Contains(
+            results,
+            result => result.Status == AttendanceActionExecutionStatus.NotEligible);
+    }
+
     private static readonly DateOnly AttendanceDate =
         new(2026, 9, 8);
 
@@ -1110,7 +1346,7 @@ public sealed class AttendanceActionExecutionServiceTests
         new(2026, 9, 12, 15, 0, 0, TimeSpan.Zero);
 
     private static AttendanceActionExecutionService CreateService(
-        FakeProvider provider,
+        ITimeClockProvider provider,
         FakeAttendanceStateStore stateStore,
         bool includeCredentials = true,
         bool executionAllowed = true)
@@ -1243,10 +1479,14 @@ public sealed class AttendanceActionExecutionServiceTests
 
         public List<DailyAttendanceRecord> SavedRecords { get; } = new();
 
+        public int LoadCount { get; private set; }
+
         public Task<DailyAttendanceRecord?> LoadAsync(
             DateOnly attendanceDate,
             CancellationToken cancellationToken = default)
         {
+            LoadCount++;
+
             var result =
                 _record is not null &&
                 _record.AttendanceDate == attendanceDate
@@ -1294,6 +1534,71 @@ public sealed class AttendanceActionExecutionServiceTests
             DateTimeOffset utcNow)
             => _allowed;
     }
+    private sealed class BlockingFakeProvider
+        : ITimeClockProvider
+    {
+        private readonly TaskCompletionSource _entered =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        private readonly TaskCompletionSource _release =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public int ClockInCallCount { get; private set; }
+
+        public int ClockOutCallCount { get; private set; }
+
+        public Task WaitUntilEnteredAsync()
+            => _entered.Task;
+
+        public void Release()
+            => _release.TrySetResult();
+
+        public Task<ProviderResult> TestConnectionAsync()
+            => Task.FromResult(
+                new ProviderResult
+                {
+                    Success = true,
+                    Action = "TestConnection",
+                    Timestamp = DateTimeOffset.UtcNow,
+                    TechnicalStatus = "Ready"
+                });
+
+        public Task<ProviderResult> ValidateCredentialsAsync(
+            string username,
+            string password)
+            => Task.FromResult(
+                new ProviderResult
+                {
+                    Success = true,
+                    Action = "ValidateCredentials",
+                    Timestamp = DateTimeOffset.UtcNow,
+                    TechnicalStatus = "SyntheticValidated"
+                });
+
+        public async Task<ProviderResult> ClockInAsync()
+        {
+            ClockInCallCount++;
+            _entered.TrySetResult();
+            await _release.Task.ConfigureAwait(false);
+
+            return new ProviderResult
+            {
+                Success = true,
+                Action = "ClockIn",
+                Timestamp = DateTimeOffset.UtcNow,
+                TechnicalStatus = "ProviderConfirmed",
+                ProviderRequestSent = true
+            };
+        }
+
+        public Task<ProviderResult> ClockOutAsync()
+        {
+            ClockOutCallCount++;
+            throw new InvalidOperationException(
+                "ClockOut was not expected in this test.");
+        }
+    }
+
     private sealed class FakeProvider
         : ITimeClockProvider
     {
