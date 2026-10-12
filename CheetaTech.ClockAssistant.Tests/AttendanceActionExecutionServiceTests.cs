@@ -791,15 +791,15 @@ public sealed class AttendanceActionExecutionServiceTests
     [InlineData(AttendanceActionType.ClockIn, AttendanceActionState.Failed)]
     [InlineData(AttendanceActionType.ClockIn, AttendanceActionState.Unknown)]
     [InlineData(AttendanceActionType.ClockIn, AttendanceActionState.Skipped)]
-    [InlineData(AttendanceActionType.ClockIn, AttendanceActionState.InProgress)]
     [InlineData(AttendanceActionType.ClockOut, AttendanceActionState.Failed)]
     [InlineData(AttendanceActionType.ClockOut, AttendanceActionState.Unknown)]
     [InlineData(AttendanceActionType.ClockOut, AttendanceActionState.Skipped)]
-    [InlineData(AttendanceActionType.ClockOut, AttendanceActionState.InProgress)]
     public async Task ExecuteAsync_ManualUnsafeStates_DoesNotCallProvider(
         AttendanceActionType actionType,
         AttendanceActionState unsafeState)
     {
+        // InProgress is covered by RecoverAbandonedInProgress_* (escalates, then
+        // remains provider-ineligible without a punch call).
         var provider = FakeProvider.Success();
         var stateStore =
             actionType == AttendanceActionType.ClockIn
@@ -1052,13 +1052,13 @@ public sealed class AttendanceActionExecutionServiceTests
     [Theory]
     [InlineData(AttendanceActionState.Unknown)]
     [InlineData(AttendanceActionState.Succeeded)]
-    [InlineData(AttendanceActionState.InProgress)]
     [InlineData(AttendanceActionState.Skipped)]
     [InlineData(AttendanceActionState.Due)]
     [InlineData(AttendanceActionState.NotDue)]
     public async Task ExecuteAsync_ManualRetryClockInUnsafeStates_DoesNotCallProvider(
         AttendanceActionState unsafeState)
     {
+        // InProgress is covered by RecoverAbandonedInProgress_* (escalates first).
         var provider = FakeProvider.Success();
         var stateStore = new FakeAttendanceStateStore(
             new DailyAttendanceRecord
@@ -1143,11 +1143,11 @@ public sealed class AttendanceActionExecutionServiceTests
     [Theory]
     [InlineData(AttendanceActionState.Unknown)]
     [InlineData(AttendanceActionState.Succeeded)]
-    [InlineData(AttendanceActionState.InProgress)]
     [InlineData(AttendanceActionState.Skipped)]
     public async Task ExecuteAsync_ManualRetryClockOutUnsafeStates_DoesNotCallProvider(
         AttendanceActionState unsafeState)
     {
+        // InProgress is covered by RecoverAbandonedInProgress_* (escalates first).
         var provider = FakeProvider.Success();
         var stateStore = new FakeAttendanceStateStore(
             new DailyAttendanceRecord
@@ -1200,6 +1200,531 @@ public sealed class AttendanceActionExecutionServiceTests
     }
 
     [Fact]
+    public async Task RecoverAbandonedInProgress_ClockIn_EscalatesToUnknownSentTrueWithoutProviderCall()
+    {
+        var provider = FakeProvider.Success();
+        var stateStore = new FakeAttendanceStateStore(
+            new DailyAttendanceRecord
+            {
+                AttendanceDate = AttendanceDate,
+                ClockInState = AttendanceActionState.InProgress,
+                ClockInProviderRequestSent = false
+            });
+
+        var service = CreateService(provider, stateStore);
+
+        var result = await service.ExecuteAsync(
+            AttendanceActionType.ClockIn,
+            ClockInDueUtc,
+            AttendanceActionExecutionMode.Manual);
+
+        Assert.Equal(
+            AttendanceActionExecutionStatus.NotEligible,
+            result.Status);
+        Assert.Equal(0, provider.ClockInCallCount);
+
+        var recovered = Assert.Single(stateStore.SavedRecords);
+        Assert.Equal(AttendanceActionState.Unknown, recovered.ClockInState);
+        Assert.True(recovered.ClockInProviderRequestSent);
+    }
+
+    [Fact]
+    public async Task RecoverAbandonedInProgress_ClockOut_EscalatesToUnknownSentTrueWithoutProviderCall()
+    {
+        var provider = FakeProvider.Success();
+        var stateStore = new FakeAttendanceStateStore(
+            new DailyAttendanceRecord
+            {
+                AttendanceDate = AttendanceDate,
+                ClockInState = AttendanceActionState.Succeeded,
+                ClockOutState = AttendanceActionState.InProgress,
+                ClockOutProviderRequestSent = null
+            });
+
+        var service = CreateService(provider, stateStore);
+
+        var result = await service.ExecuteAsync(
+            AttendanceActionType.ClockOut,
+            ClockOutDueUtc,
+            AttendanceActionExecutionMode.Manual);
+
+        Assert.Equal(
+            AttendanceActionExecutionStatus.NotEligible,
+            result.Status);
+        Assert.Equal(0, provider.ClockOutCallCount);
+
+        var recovered = Assert.Single(stateStore.SavedRecords);
+        Assert.Equal(AttendanceActionState.Succeeded, recovered.ClockInState);
+        Assert.Equal(AttendanceActionState.Unknown, recovered.ClockOutState);
+        Assert.True(recovered.ClockOutProviderRequestSent);
+    }
+
+    [Fact]
+    public async Task RecoverAbandonedInProgress_LeavesNonInProgressStatesUnchanged()
+    {
+        var provider = FakeProvider.Success();
+        var initial = new DailyAttendanceRecord
+        {
+            AttendanceDate = AttendanceDate,
+            ClockInState = AttendanceActionState.Succeeded,
+            ClockInProviderRequestSent = true,
+            ClockOutState = AttendanceActionState.Failed,
+            ClockOutProviderRequestSent = true
+        };
+        var stateStore = new FakeAttendanceStateStore(initial);
+        var service = CreateService(provider, stateStore);
+
+        var result = await service.ExecuteAsync(
+            AttendanceActionType.ClockOut,
+            ClockOutDueUtc,
+            AttendanceActionExecutionMode.ManualRetry);
+
+        Assert.Equal(
+            AttendanceActionExecutionStatus.NotEligible,
+            result.Status);
+        Assert.Empty(stateStore.SavedRecords);
+        Assert.Equal(0, provider.ClockOutCallCount);
+
+        var loaded = await stateStore.LoadAsync(AttendanceDate);
+        Assert.Equal(initial, loaded);
+    }
+
+    [Fact]
+    public async Task RecoverAbandonedInProgress_DoesNotEscalateCurrentProcessInFlightAction()
+    {
+        var provider = new BlockingFakeProvider();
+        var stateStore = new FakeAttendanceStateStore();
+        var service = CreateService(provider, stateStore);
+
+        var executeTask = service.ExecuteAsync(
+            AttendanceActionType.ClockIn,
+            ClockInDueUtc);
+
+        await provider.WaitUntilEnteredAsync();
+
+        Assert.Equal(
+            AttendanceActionState.InProgress,
+            stateStore.SavedRecords[^1].ClockInState);
+
+        var concurrentTask = service.ExecuteAsync(
+            AttendanceActionType.ClockIn,
+            ClockInDueUtc,
+            AttendanceActionExecutionMode.Manual);
+
+        Assert.False(concurrentTask.IsCompleted);
+        Assert.Equal(
+            AttendanceActionState.InProgress,
+            stateStore.SavedRecords[^1].ClockInState);
+
+        provider.Release();
+
+        var first = await executeTask;
+        var second = await concurrentTask;
+
+        Assert.Equal(
+            AttendanceActionExecutionStatus.Succeeded,
+            first.Status);
+        Assert.Equal(
+            AttendanceActionExecutionStatus.NotEligible,
+            second.Status);
+        Assert.Equal(1, provider.ClockInCallCount);
+        Assert.Equal(
+            AttendanceActionState.Succeeded,
+            stateStore.SavedRecords[^1].ClockInState);
+        Assert.DoesNotContain(
+            stateStore.SavedRecords,
+            record =>
+                record.ClockInState == AttendanceActionState.Unknown);
+    }
+
+    [Fact]
+    public async Task RecoverAbandonedInProgress_ConcurrentEntryPointsShareOneBarrier()
+    {
+        var provider = FakeProvider.Success();
+        var stateStore = new FakeAttendanceStateStore(
+            new DailyAttendanceRecord
+            {
+                AttendanceDate = AttendanceDate,
+                ClockInState = AttendanceActionState.InProgress
+            });
+
+        var service = CreateService(provider, stateStore);
+
+        var executeTask = service.ExecuteAsync(
+            AttendanceActionType.ClockIn,
+            ClockInDueUtc,
+            AttendanceActionExecutionMode.Manual);
+        var completedElsewhereTask = service.MarkCompletedElsewhereAsync(
+            AttendanceActionType.ClockIn,
+            ClockInDueUtc);
+
+        var executeResult = await executeTask;
+        var completedElsewhereResult = await completedElsewhereTask;
+
+        Assert.Equal(0, provider.ClockInCallCount);
+        Assert.Equal(
+            AttendanceActionExecutionStatus.NotEligible,
+            executeResult.Status);
+        Assert.Equal(
+            AttendanceCompletedElsewhereStatus.Succeeded,
+            completedElsewhereResult.Status);
+
+        var recoverySaves = stateStore.SavedRecords.Count(
+            record =>
+                record.ClockInState == AttendanceActionState.Unknown &&
+                record.ClockInProviderRequestSent == true);
+
+        Assert.Equal(1, recoverySaves);
+        Assert.Contains(
+            stateStore.SavedRecords,
+            record =>
+                record.ClockInState == AttendanceActionState.Succeeded &&
+                record.ClockInCompletionSource ==
+                AttendanceActionCompletionSource.CompletedElsewhere);
+    }
+
+    [Fact]
+    public async Task RecoverAbandonedInProgress_RepeatedEntryDoesNotRerunRecovery()
+    {
+        var provider = FakeProvider.Success();
+        var stateStore = new FakeAttendanceStateStore(
+            new DailyAttendanceRecord
+            {
+                AttendanceDate = AttendanceDate,
+                ClockInState = AttendanceActionState.InProgress
+            });
+
+        var service = CreateService(provider, stateStore);
+
+        await service.ExecuteAsync(
+            AttendanceActionType.ClockIn,
+            ClockInDueUtc,
+            AttendanceActionExecutionMode.Manual);
+
+        var savesAfterFirst = stateStore.SaveAttemptCount;
+
+        await service.ExecuteAsync(
+            AttendanceActionType.ClockIn,
+            ClockInDueUtc,
+            AttendanceActionExecutionMode.Manual);
+
+        Assert.Equal(savesAfterFirst, stateStore.SaveAttemptCount);
+        Assert.Equal(
+            AttendanceActionState.Unknown,
+            (await stateStore.LoadAsync(AttendanceDate))!.ClockInState);
+    }
+
+    [Fact]
+    public async Task RecoverAbandonedInProgress_PersistenceFailure_BlocksProviderExecution()
+    {
+        var provider = FakeProvider.Success();
+        var stateStore = new FakeAttendanceStateStore(
+            new DailyAttendanceRecord
+            {
+                AttendanceDate = AttendanceDate,
+                ClockInState = AttendanceActionState.InProgress
+            },
+            failNextSaves: 1);
+
+        var service = CreateService(provider, stateStore);
+
+        var result = await service.ExecuteAsync(
+            AttendanceActionType.ClockIn,
+            ClockInDueUtc,
+            AttendanceActionExecutionMode.Manual);
+
+        Assert.Equal(
+            AttendanceActionExecutionStatus.PersistenceFailed,
+            result.Status);
+        Assert.Equal(0, provider.ClockInCallCount);
+        Assert.Empty(stateStore.SavedRecords);
+        Assert.Equal(
+            AttendanceActionState.InProgress,
+            (await stateStore.LoadAsync(AttendanceDate))!.ClockInState);
+    }
+
+    [Fact]
+    public async Task RecoverAbandonedInProgress_PersistenceFailure_BlocksCompletedElsewhere()
+    {
+        var provider = FakeProvider.Success();
+        var stateStore = new FakeAttendanceStateStore(
+            new DailyAttendanceRecord
+            {
+                AttendanceDate = AttendanceDate,
+                ClockInState = AttendanceActionState.InProgress
+            },
+            failNextSaves: 1);
+
+        var service = CreateService(provider, stateStore);
+
+        var result = await service.MarkCompletedElsewhereAsync(
+            AttendanceActionType.ClockIn,
+            ClockInDueUtc);
+
+        Assert.Equal(
+            AttendanceCompletedElsewhereStatus.PersistenceFailed,
+            result.Status);
+        Assert.Equal(0, provider.ClockInCallCount);
+        Assert.Empty(stateStore.SavedRecords);
+        Assert.Equal(
+            AttendanceActionState.InProgress,
+            (await stateStore.LoadAsync(AttendanceDate))!.ClockInState);
+    }
+
+    [Fact]
+    public async Task RecoverAbandonedInProgress_AfterRecovery_OrdinaryManualRetryRemainsBlocked()
+    {
+        var provider = FakeProvider.Success();
+        var stateStore = new FakeAttendanceStateStore(
+            new DailyAttendanceRecord
+            {
+                AttendanceDate = AttendanceDate,
+                ClockInState = AttendanceActionState.InProgress
+            });
+
+        var service = CreateService(provider, stateStore);
+
+        await service.ExecuteAsync(
+            AttendanceActionType.ClockIn,
+            ClockInDueUtc,
+            AttendanceActionExecutionMode.Manual);
+
+        var retry = await service.ExecuteAsync(
+            AttendanceActionType.ClockIn,
+            ClockInDueUtc,
+            AttendanceActionExecutionMode.ManualRetry);
+
+        Assert.Equal(
+            AttendanceActionExecutionStatus.NotEligible,
+            retry.Status);
+        Assert.Equal(0, provider.ClockInCallCount);
+
+        var evaluation = new AttendanceStateEvaluator().Evaluate(
+            Configuration(),
+            ClockInDueUtc,
+            await stateStore.LoadAsync(AttendanceDate));
+
+        var plan = AttendanceHomeActionPlanner.Plan(
+            evaluation,
+            await stateStore.LoadAsync(AttendanceDate));
+
+        Assert.Equal(AttendanceHomePrimaryActionMode.None, plan.PrimaryMode);
+        Assert.True(plan.OfferCompletedElsewhere);
+    }
+
+    [Fact]
+    public async Task RecoverAbandonedInProgress_ThenCompletedElsewhere_SucceedsUnderSharedGate()
+    {
+        var provider = FakeProvider.Success();
+        var stateStore = new FakeAttendanceStateStore(
+            new DailyAttendanceRecord
+            {
+                AttendanceDate = AttendanceDate,
+                ClockInState = AttendanceActionState.InProgress
+            });
+
+        var service = CreateService(provider, stateStore);
+
+        var result = await service.MarkCompletedElsewhereAsync(
+            AttendanceActionType.ClockIn,
+            ClockInDueUtc);
+
+        Assert.Equal(
+            AttendanceCompletedElsewhereStatus.Succeeded,
+            result.Status);
+        Assert.Equal(0, provider.ClockInCallCount);
+        Assert.Equal(
+            AttendanceActionCompletionSource.CompletedElsewhere,
+            stateStore.SavedRecords[^1].ClockInCompletionSource);
+    }
+
+    [Fact]
+    public async Task RecoverAbandonedInProgress_ClockOutOnD_RestartAfterLocalMidnightOnDPlus1()
+    {
+        // Local midnight America/Toronto (EDT): 2026-09-09 00:30 = 04:30 UTC.
+        // Use Clock Out Manual so today's early NotDue Clock In is not auto-executed.
+        var provider = FakeProvider.Success();
+        var dayD = AttendanceDate;
+        var stateStore = new FakeAttendanceStateStore(
+            new DailyAttendanceRecord
+            {
+                AttendanceDate = dayD,
+                ClockInState = AttendanceActionState.Succeeded,
+                ClockInProviderRequestSent = true,
+                ClockOutState = AttendanceActionState.InProgress,
+                ClockOutProviderRequestSent = false
+            });
+
+        var service = CreateService(provider, stateStore);
+
+        var result = await service.ExecuteAsync(
+            AttendanceActionType.ClockOut,
+            DayAfterAttendanceLocalEarlyUtc,
+            AttendanceActionExecutionMode.Manual);
+
+        Assert.Equal(0, provider.ClockInCallCount);
+        Assert.Equal(0, provider.ClockOutCallCount);
+        Assert.Equal(
+            AttendanceActionExecutionStatus.NotEligible,
+            result.Status);
+
+        var recoveredDayD = await stateStore.LoadAsync(dayD);
+        Assert.NotNull(recoveredDayD);
+        Assert.Equal(AttendanceActionState.Succeeded, recoveredDayD.ClockInState);
+        Assert.Equal(AttendanceActionState.Unknown, recoveredDayD.ClockOutState);
+        Assert.True(recoveredDayD.ClockOutProviderRequestSent);
+    }
+
+    [Fact]
+    public async Task RecoverAbandonedInProgress_ClockInOnD_RestartAfterLocalMidnightOnDPlus1()
+    {
+        var provider = FakeProvider.Success();
+        var dayD = AttendanceDate;
+        var stateStore = new FakeAttendanceStateStore(
+            new DailyAttendanceRecord
+            {
+                AttendanceDate = dayD,
+                ClockInState = AttendanceActionState.InProgress
+            });
+
+        var service = CreateService(provider, stateStore);
+
+        var result = await service.ExecuteAsync(
+            AttendanceActionType.ClockOut,
+            DayAfterAttendanceLocalEarlyUtc,
+            AttendanceActionExecutionMode.Manual);
+
+        Assert.Equal(0, provider.ClockInCallCount);
+        Assert.Equal(0, provider.ClockOutCallCount);
+        Assert.Equal(
+            AttendanceActionExecutionStatus.NotEligible,
+            result.Status);
+
+        var recoveredDayD = await stateStore.LoadAsync(dayD);
+        Assert.NotNull(recoveredDayD);
+        Assert.Equal(AttendanceActionState.Unknown, recoveredDayD.ClockInState);
+        Assert.True(recoveredDayD.ClockInProviderRequestSent);
+    }
+
+    [Fact]
+    public async Task RecoverAbandonedInProgress_FirstCallerOnDPlus1_SecondCallerOnD_DoesNotMissDayD()
+    {
+        var provider = FakeProvider.Success();
+        var dayD = AttendanceDate;
+        var stateStore = new FakeAttendanceStateStore(
+            new DailyAttendanceRecord
+            {
+                AttendanceDate = dayD,
+                ClockInState = AttendanceActionState.InProgress
+            });
+
+        var service = CreateService(provider, stateStore);
+
+        // First process caller after local midnight recovers D even though its
+        // attendance date is D+1.
+        await service.ExecuteAsync(
+            AttendanceActionType.ClockOut,
+            DayAfterAttendanceLocalEarlyUtc,
+            AttendanceActionExecutionMode.Manual);
+
+        var afterFirstCaller = await stateStore.LoadAsync(dayD);
+        Assert.NotNull(afterFirstCaller);
+        Assert.Equal(AttendanceActionState.Unknown, afterFirstCaller.ClockInState);
+        Assert.True(afterFirstCaller.ClockInProviderRequestSent);
+
+        // Second caller on D does not re-run recovery; day D remains recovered.
+        await service.MarkCompletedElsewhereAsync(
+            AttendanceActionType.ClockIn,
+            ClockInDueUtc);
+
+        var recoveredDayD = await stateStore.LoadAsync(dayD);
+        Assert.NotNull(recoveredDayD);
+        Assert.Equal(AttendanceActionState.Succeeded, recoveredDayD.ClockInState);
+        Assert.Equal(
+            AttendanceActionCompletionSource.CompletedElsewhere,
+            recoveredDayD.ClockInCompletionSource);
+        Assert.True(recoveredDayD.ClockInProviderRequestSent);
+        Assert.Equal(0, provider.ClockInCallCount);
+    }
+
+    [Fact]
+    public async Task RecoverAbandonedInProgress_ClockOutOnD_DoesNotBlockEligibleClockInOnDPlus1()
+    {
+        var provider = FakeProvider.Success();
+        var dayD = AttendanceDate;
+        var dayAfter = dayD.AddDays(1);
+        var stateStore = new FakeAttendanceStateStore(
+            new DailyAttendanceRecord
+            {
+                AttendanceDate = dayD,
+                ClockInState = AttendanceActionState.Succeeded,
+                ClockInProviderRequestSent = true,
+                ClockOutState = AttendanceActionState.InProgress,
+                ClockOutProviderRequestSent = false
+            });
+
+        var service = CreateService(provider, stateStore);
+
+        var result = await service.ExecuteAsync(
+            AttendanceActionType.ClockIn,
+            DayAfterAttendanceClockInDueUtc,
+            AttendanceActionExecutionMode.Manual);
+
+        Assert.Equal(
+            AttendanceActionExecutionStatus.Succeeded,
+            result.Status);
+        Assert.Equal(1, provider.ClockInCallCount);
+        Assert.Equal(0, provider.ClockOutCallCount);
+
+        var recoveredDayD = await stateStore.LoadAsync(dayD);
+        Assert.NotNull(recoveredDayD);
+        Assert.Equal(AttendanceActionState.Succeeded, recoveredDayD.ClockInState);
+        Assert.Equal(AttendanceActionState.Unknown, recoveredDayD.ClockOutState);
+        Assert.True(recoveredDayD.ClockOutProviderRequestSent);
+
+        var today = await stateStore.LoadAsync(dayAfter);
+        Assert.NotNull(today);
+        Assert.Equal(AttendanceActionState.Succeeded, today.ClockInState);
+    }
+
+    [Fact]
+    public async Task RecoverAbandonedInProgress_ForgottenClockOutNotAttempted_LeavesPriorDayUnchanged_AndTodayClockInEligible()
+    {
+        var provider = FakeProvider.Success();
+        var dayD = AttendanceDate;
+        var dayAfter = dayD.AddDays(1);
+        var priorDay = new DailyAttendanceRecord
+        {
+            AttendanceDate = dayD,
+            ClockInState = AttendanceActionState.Succeeded,
+            ClockInProviderRequestSent = true,
+            ClockOutState = AttendanceActionState.NotDue
+        };
+
+        var stateStore = new FakeAttendanceStateStore(new[] { priorDay });
+        var service = CreateService(provider, stateStore);
+
+        var result = await service.ExecuteAsync(
+            AttendanceActionType.ClockIn,
+            DayAfterAttendanceClockInDueUtc,
+            AttendanceActionExecutionMode.Manual);
+
+        Assert.Equal(
+            AttendanceActionExecutionStatus.Succeeded,
+            result.Status);
+        Assert.Equal(1, provider.ClockInCallCount);
+
+        var unchangedPrior = await stateStore.LoadAsync(dayD);
+        Assert.Equal(priorDay, unchangedPrior);
+        Assert.Equal(AttendanceActionState.Succeeded, unchangedPrior!.ClockInState);
+        Assert.Equal(AttendanceActionState.NotDue, unchangedPrior.ClockOutState);
+
+        var today = await stateStore.LoadAsync(dayAfter);
+        Assert.NotNull(today);
+        Assert.Equal(AttendanceActionState.Succeeded, today.ClockInState);
+    }
+
+    [Fact]
     public async Task MarkCompletedElsewhereAsync_EligibleFailedClockIn_SucceedsWithoutProviderCall()
     {
         var provider = FakeProvider.Success();
@@ -1232,12 +1757,13 @@ public sealed class AttendanceActionExecutionServiceTests
     }
 
     [Theory]
-    [InlineData(AttendanceActionState.InProgress)]
     [InlineData(AttendanceActionState.Succeeded)]
     [InlineData(AttendanceActionState.Skipped)]
     public async Task MarkCompletedElsewhereAsync_DisallowedClockInStates_AreRejected(
         AttendanceActionState disallowedState)
     {
+        // Abandoned InProgress is recovered to Unknown then may use CE
+        // (RecoverAbandonedInProgress_ThenCompletedElsewhere_*).
         var provider = FakeProvider.Success();
         var stateStore = new FakeAttendanceStateStore(
             new DailyAttendanceRecord
@@ -1441,6 +1967,19 @@ public sealed class AttendanceActionExecutionServiceTests
     private static readonly DateOnly NonWorkdayAttendanceDate =
         new(2026, 9, 12);
 
+    /// <summary>
+    /// 00:30 America/Toronto on 2026-09-09 (EDT, UTC-4) — local midnight+ of
+    /// AttendanceDate, not a UTC-date rollover.
+    /// </summary>
+    private static readonly DateTimeOffset DayAfterAttendanceLocalEarlyUtc =
+        new(2026, 9, 9, 4, 30, 0, TimeSpan.Zero);
+
+    /// <summary>
+    /// Same local Clock In due instant as ClockInDueUtc, one local attendance day later.
+    /// </summary>
+    private static readonly DateTimeOffset DayAfterAttendanceClockInDueUtc =
+        new(2026, 9, 9, 10, 50, 0, TimeSpan.Zero);
+
     private static readonly DateTimeOffset ClockInEarlyUtc =
         new(2026, 9, 8, 10, 30, 0, TimeSpan.Zero);
 
@@ -1586,17 +2125,38 @@ public sealed class AttendanceActionExecutionServiceTests
     private sealed class FakeAttendanceStateStore
         : IAttendanceStateStore
     {
-        private DailyAttendanceRecord? _record;
+        private readonly Dictionary<DateOnly, DailyAttendanceRecord> _records = new();
+        private int _remainingSaveFailures;
 
         public FakeAttendanceStateStore(
-            DailyAttendanceRecord? record = null)
+            DailyAttendanceRecord? record = null,
+            int failNextSaves = 0)
         {
-            _record = record;
+            if (record is not null)
+            {
+                _records[record.AttendanceDate] = record;
+            }
+
+            _remainingSaveFailures = failNextSaves;
+        }
+
+        public FakeAttendanceStateStore(
+            IEnumerable<DailyAttendanceRecord> records,
+            int failNextSaves = 0)
+        {
+            foreach (var record in records)
+            {
+                _records[record.AttendanceDate] = record;
+            }
+
+            _remainingSaveFailures = failNextSaves;
         }
 
         public List<DailyAttendanceRecord> SavedRecords { get; } = new();
 
         public int LoadCount { get; private set; }
+
+        public int SaveAttemptCount { get; private set; }
 
         public Task<DailyAttendanceRecord?> LoadAsync(
             DateOnly attendanceDate,
@@ -1604,12 +2164,7 @@ public sealed class AttendanceActionExecutionServiceTests
         {
             LoadCount++;
 
-            var result =
-                _record is not null &&
-                _record.AttendanceDate == attendanceDate
-                    ? _record
-                    : null;
-
+            _records.TryGetValue(attendanceDate, out var result);
             return Task.FromResult(result);
         }
 
@@ -1617,7 +2172,16 @@ public sealed class AttendanceActionExecutionServiceTests
             DailyAttendanceRecord record,
             CancellationToken cancellationToken = default)
         {
-            _record = record;
+            SaveAttemptCount++;
+
+            if (_remainingSaveFailures > 0)
+            {
+                _remainingSaveFailures--;
+                throw new InvalidOperationException(
+                    "Synthetic attendance persistence failure.");
+            }
+
+            _records[record.AttendanceDate] = record;
             SavedRecords.Add(record);
             return Task.CompletedTask;
         }
@@ -1626,11 +2190,7 @@ public sealed class AttendanceActionExecutionServiceTests
             DateOnly attendanceDate,
             CancellationToken cancellationToken = default)
         {
-            if (_record?.AttendanceDate == attendanceDate)
-            {
-                _record = null;
-            }
-
+            _records.Remove(attendanceDate);
             return Task.CompletedTask;
         }
     }

@@ -14,6 +14,9 @@ public sealed class AttendanceActionExecutionService
     private readonly AttendanceStateEvaluator _stateEvaluator;
     private readonly IAttendanceProviderExecutionGate _providerExecutionGate;
     private readonly SemaphoreSlim _executionGate = new(1, 1);
+    private readonly object _abandonedInProgressRecoveryInitLock = new();
+    private Task? _abandonedInProgressRecoveryTask;
+    private bool _abandonedInProgressRecoverySucceeded;
 
     public AttendanceActionExecutionService(
         IClockAssistantConfigurationStore configurationStore,
@@ -65,6 +68,17 @@ public sealed class AttendanceActionExecutionService
         DateTimeOffset utcNow,
         CancellationToken cancellationToken = default)
     {
+        await EnsureAbandonedInProgressRecoveredAsync(utcNow)
+            .ConfigureAwait(false);
+
+        if (!_abandonedInProgressRecoverySucceeded)
+        {
+            return new AttendanceCompletedElsewhereResult(
+                actionType,
+                AttendanceCompletedElsewhereStatus.PersistenceFailed,
+                AttendanceDate: null);
+        }
+
         await _executionGate.WaitAsync(cancellationToken);
 
         try
@@ -182,6 +196,16 @@ public sealed class AttendanceActionExecutionService
         AttendanceActionExecutionMode executionMode,
         CancellationToken cancellationToken = default)
     {
+        await EnsureAbandonedInProgressRecoveredAsync(utcNow)
+            .ConfigureAwait(false);
+
+        if (!_abandonedInProgressRecoverySucceeded)
+        {
+            return Result(
+                actionType,
+                AttendanceActionExecutionStatus.PersistenceFailed);
+        }
+
         await _executionGate.WaitAsync(cancellationToken);
 
         try
@@ -346,6 +370,131 @@ public sealed class AttendanceActionExecutionService
         {
             _executionGate.Release();
         }
+    }
+
+    /// <summary>
+    /// Once per service instance: under the execution gate, escalate any
+    /// persisted InProgress left by a prior process to Unknown with
+    /// ProviderRequestSent=true. Completes before the first attendance
+    /// mutation in this process, so a live same-process InProgress cannot
+    /// exist yet and cannot be mis-escalated.
+    /// </summary>
+    private Task EnsureAbandonedInProgressRecoveredAsync(
+        DateTimeOffset utcNow)
+    {
+        var existing = Volatile.Read(ref _abandonedInProgressRecoveryTask);
+        if (existing is not null)
+        {
+            return existing;
+        }
+
+        lock (_abandonedInProgressRecoveryInitLock)
+        {
+            if (_abandonedInProgressRecoveryTask is not null)
+            {
+                return _abandonedInProgressRecoveryTask;
+            }
+
+            // First caller supplies the attendance-date clock for this process.
+            _abandonedInProgressRecoveryTask =
+                RecoverAbandonedInProgressAsync(utcNow);
+
+            return _abandonedInProgressRecoveryTask;
+        }
+    }
+
+    private async Task RecoverAbandonedInProgressAsync(
+        DateTimeOffset utcNow)
+    {
+        await _executionGate.WaitAsync().ConfigureAwait(false);
+
+        try
+        {
+            var configuration =
+                await _configurationStore.GetAsync().ConfigureAwait(false);
+
+            if (configuration is null)
+            {
+                _abandonedInProgressRecoverySucceeded = true;
+                return;
+            }
+
+            // Attendance dates are configured-local calendar dates, not UTC dates.
+            // Preferences has no key enumeration, so recover the current local date
+            // and the immediately previous local date (covers midnight restart after
+            // a same-evening interruption). Older orphans are out of F01 scope.
+            var currentAttendanceDate =
+                _stateEvaluator.Evaluate(
+                    configuration,
+                    utcNow)
+                    .AttendanceDate;
+
+            var previousAttendanceDate =
+                currentAttendanceDate.AddDays(-1);
+
+            await RecoverAbandonedInProgressForDateAsync(
+                    currentAttendanceDate)
+                .ConfigureAwait(false);
+
+            await RecoverAbandonedInProgressForDateAsync(
+                    previousAttendanceDate)
+                .ConfigureAwait(false);
+
+            _abandonedInProgressRecoverySucceeded = true;
+        }
+        catch
+        {
+            _abandonedInProgressRecoverySucceeded = false;
+        }
+        finally
+        {
+            _executionGate.Release();
+        }
+    }
+
+    private async Task RecoverAbandonedInProgressForDateAsync(
+        DateOnly attendanceDate)
+    {
+        var record =
+            await _attendanceStateStore.LoadAsync(attendanceDate)
+                .ConfigureAwait(false);
+
+        if (record is null ||
+            record.AttendanceDate != attendanceDate)
+        {
+            return;
+        }
+
+        var updated = record;
+        var changed = false;
+
+        if (record.ClockInState == AttendanceActionState.InProgress)
+        {
+            updated = updated with
+            {
+                ClockInState = AttendanceActionState.Unknown,
+                ClockInProviderRequestSent = true
+            };
+            changed = true;
+        }
+
+        if (record.ClockOutState == AttendanceActionState.InProgress)
+        {
+            updated = updated with
+            {
+                ClockOutState = AttendanceActionState.Unknown,
+                ClockOutProviderRequestSent = true
+            };
+            changed = true;
+        }
+
+        if (!changed)
+        {
+            return;
+        }
+
+        await _attendanceStateStore.SaveAsync(updated)
+            .ConfigureAwait(false);
     }
 
     private async Task<AttendanceActionExecutionResult> SaveFinalStateAsync(
