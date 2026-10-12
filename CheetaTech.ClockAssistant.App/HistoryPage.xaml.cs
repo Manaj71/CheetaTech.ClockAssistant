@@ -66,13 +66,17 @@ public partial class HistoryPage : ContentPage
             entries
                 .GroupBy(entry => entry.AttendanceDate)
                 .OrderByDescending(group => group.Key)
-                .Select(group =>
+                .Select((group, index) =>
                     new HistoryDayGroup(
                         group.Key,
+                        isAlternateBand: index % 2 == 1,
                         group
                             .OrderByDescending(
                                 entry => entry.OccurredAtUtc)
-                            .Select(CreateRow)))
+                            .Select(entry =>
+                                CreateRow(
+                                    entry,
+                                    isAlternateBand: index % 2 == 1))))
                 .ToList();
 
         return new ObservableCollection<HistoryDayGroup>(
@@ -80,17 +84,25 @@ public partial class HistoryPage : ContentPage
     }
 
     private static HistoryRow CreateRow(
-        AttendanceHistoryEntry entry)
+        AttendanceHistoryEntry entry,
+        bool isAlternateBand)
     {
         var localTime =
             entry.OccurredAtUtc.ToLocalTime();
 
+        var actionLabel = GetActionLabel(entry.ActionType);
+        var timeLabel = localTime.ToString(
+            "t",
+            CultureInfo.CurrentCulture);
+        var status = GetStatusDisplay(entry.Outcome);
+
         return new HistoryRow(
-            GetActionLabel(entry.ActionType),
-            localTime.ToString(
-                "t",
-                CultureInfo.CurrentCulture),
-            GetOutcomeLabel(entry.Outcome));
+            actionLabel,
+            timeLabel,
+            status.Letter,
+            status.Description,
+            $"{actionLabel}, {timeLabel}, {status.Description}",
+            isAlternateBand);
     }
 
     private static string GetActionLabel(
@@ -104,27 +116,28 @@ public partial class HistoryPage : ContentPage
         };
     }
 
-    private static string GetOutcomeLabel(
+    private static (string Letter, string Description) GetStatusDisplay(
         AttendanceHistoryOutcome outcome)
     {
         return outcome switch
         {
             AttendanceHistoryOutcome.Confirmed =>
-                "Confirmed",
+                ("C", "Confirmed"),
 
             AttendanceHistoryOutcome.ConfirmedNeedsAttention =>
-                "Confirmed — local save issue",
+                ("A", "Confirmed, needs attention"),
 
             AttendanceHistoryOutcome.NotConfirmed =>
-                "Not confirmed",
+                ("F", "Not confirmed"),
 
             AttendanceHistoryOutcome.Uncertain =>
-                "Status uncertain",
+                ("U", "Uncertain"),
 
             AttendanceHistoryOutcome.NotCompleted =>
-                "Not completed",
+                ("N", "Not completed"),
 
-            _ => outcome.ToString()
+            _ =>
+                ("?", outcome.ToString())
         };
     }
 
@@ -133,6 +146,7 @@ public partial class HistoryPage : ContentPage
     {
         public HistoryDayGroup(
             DateOnly attendanceDate,
+            bool isAlternateBand,
             IEnumerable<HistoryRow> items)
             : base(items)
         {
@@ -140,9 +154,12 @@ public partial class HistoryPage : ContentPage
                 attendanceDate.ToString(
                     "D",
                     CultureInfo.CurrentCulture);
+            IsAlternateBand = isAlternateBand;
         }
 
         public string DateLabel { get; }
+
+        public bool IsAlternateBand { get; }
     }
 
     public sealed class HistoryRow
@@ -150,17 +167,29 @@ public partial class HistoryPage : ContentPage
         public HistoryRow(
             string actionLabel,
             string timeLabel,
-            string outcomeLabel)
+            string statusLetter,
+            string statusDescription,
+            string accessibilityLabel,
+            bool isAlternateBand)
         {
             ActionLabel = actionLabel;
             TimeLabel = timeLabel;
-            OutcomeLabel = outcomeLabel;
+            StatusLetter = statusLetter;
+            StatusDescription = statusDescription;
+            AccessibilityLabel = accessibilityLabel;
+            IsAlternateBand = isAlternateBand;
         }
 
         public string ActionLabel { get; }
 
         public string TimeLabel { get; }
 
-        public string OutcomeLabel { get; }
+        public string StatusLetter { get; }
+
+        public string StatusDescription { get; }
+
+        public string AccessibilityLabel { get; }
+
+        public bool IsAlternateBand { get; }
     }
 }

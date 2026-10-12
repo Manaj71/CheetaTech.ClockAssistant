@@ -6,75 +6,186 @@
     Title="History">
 
     <Grid
-        Padding="24"
-        RowDefinitions="Auto,Auto,*,Auto"
+        Padding="16,12"
+        RowDefinitions="Auto,Auto,Auto,*,Auto"
         MaximumWidthRequest="620"
-        HorizontalOptions="Center">
+        HorizontalOptions="Fill">
 
         <VerticalStackLayout
             Grid.Row="0"
-            Spacing="4">
+            Spacing="2">
             <Label
                 Text="History"
-                FontSize="28"
+                FontSize="22"
                 FontAttributes="Bold"
                 SemanticProperties.HeadingLevel="Level1" />
             <Label
                 Text="Last 30 days • stored on this device"
-                LineBreakMode="WordWrap" />
+                FontSize="13"
+                LineBreakMode="WordWrap"
+                Opacity="0.8" />
+        </VerticalStackLayout>
+
+        <VerticalStackLayout
+            Grid.Row="1"
+            Margin="0,8,0,0"
+            Spacing="2"
+            SemanticProperties.Description="Status legend">
+            <Label
+                Text="Status"
+                FontSize="12"
+                FontAttributes="Bold"
+                Opacity="0.85" />
+            <Label
+                FontSize="12"
+                LineBreakMode="WordWrap"
+                Opacity="0.85">
+                <Label.FormattedText>
+                    <FormattedString>
+                        <Span Text="C " FontAttributes="Bold" TextColor="{AppThemeBinding Light=#1B7F3A, Dark=#6FCF97}" />
+                        <Span Text="Confirmed   " />
+                        <Span Text="A " FontAttributes="Bold" TextColor="{AppThemeBinding Light=#0B6E99, Dark=#6EC6E6}" />
+                        <Span Text="Confirmed, needs attention   " />
+                        <Span Text="U " FontAttributes="Bold" TextColor="{AppThemeBinding Light=#A15C00, Dark=#F0B429}" />
+                        <Span Text="Uncertain   " />
+                        <Span Text="F " FontAttributes="Bold" TextColor="{AppThemeBinding Light=#B42318, Dark=#F97066}" />
+                        <Span Text="Not confirmed   " />
+                        <Span Text="N " FontAttributes="Bold" TextColor="{AppThemeBinding Light=#475467, Dark=#98A2B3}" />
+                        <Span Text="Not completed" />
+                    </FormattedString>
+                </Label.FormattedText>
+            </Label>
         </VerticalStackLayout>
 
         <Label
             x:Name="ErrorLabel"
-            Grid.Row="1"
+            Grid.Row="2"
             IsVisible="False"
             FontAttributes="Bold"
             LineBreakMode="WordWrap"
-            Margin="0,12,0,0" />
+            Margin="0,8,0,0" />
 
         <CollectionView
             x:Name="HistoryCollectionView"
-            Grid.Row="2"
+            Grid.Row="3"
             IsVisible="False"
             IsGrouped="True"
-            Margin="0,16,0,0">
+            Margin="0,8,0,0">
             <CollectionView.GroupHeaderTemplate>
                 <DataTemplate>
-                    <Border
-                        StrokeThickness="1"
-                        Padding="10"
-                        Margin="0,12,0,6">
+                    <!-- Subtle alternating day bands; transparent = page background. -->
+                    <Grid
+                        Padding="10,8,10,2"
+                        BackgroundColor="Transparent">
+                        <Grid.Triggers>
+                            <DataTrigger
+                                TargetType="Grid"
+                                Binding="{Binding IsAlternateBand}"
+                                Value="True">
+                                <Setter
+                                    Property="BackgroundColor"
+                                    Value="{AppThemeBinding Light=#F0F3F7, Dark=#1E2430}" />
+                            </DataTrigger>
+                        </Grid.Triggers>
                         <Label
                             Text="{Binding DateLabel}"
-                            FontAttributes="Bold" />
-                    </Border>
+                            FontAttributes="Bold"
+                            FontSize="14"
+                            SemanticProperties.HeadingLevel="Level2" />
+                    </Grid>
                 </DataTemplate>
             </CollectionView.GroupHeaderTemplate>
 
             <CollectionView.ItemTemplate>
                 <DataTemplate>
-                    <Border
-                        StrokeThickness="1"
-                        Padding="12"
-                        Margin="0,0,0,8">
-                        <VerticalStackLayout Spacing="4">
-                            <Label
-                                Text="{Binding ActionLabel}"
-                                FontAttributes="Bold" />
-                            <Label Text="{Binding TimeLabel}" />
-                            <Label Text="{Binding OutcomeLabel}" />
-                        </VerticalStackLayout>
-                    </Border>
+                    <Grid
+                        ColumnDefinitions="*,Auto,28"
+                        ColumnSpacing="8"
+                        Padding="10,5"
+                        BackgroundColor="Transparent"
+                        SemanticProperties.Description="{Binding AccessibilityLabel}">
+                        <Grid.Triggers>
+                            <DataTrigger
+                                TargetType="Grid"
+                                Binding="{Binding IsAlternateBand}"
+                                Value="True">
+                                <Setter
+                                    Property="BackgroundColor"
+                                    Value="{AppThemeBinding Light=#F0F3F7, Dark=#1E2430}" />
+                            </DataTrigger>
+                        </Grid.Triggers>
+                        <Label
+                            Text="{Binding ActionLabel}"
+                            VerticalOptions="Center"
+                            LineBreakMode="TailTruncation" />
+                        <Label
+                            Grid.Column="1"
+                            Text="{Binding TimeLabel}"
+                            VerticalOptions="Center"
+                            HorizontalTextAlignment="End"
+                            LineBreakMode="NoWrap" />
+                        <Label
+                            Grid.Column="2"
+                            Text="{Binding StatusLetter}"
+                            FontAttributes="Bold"
+                            FontSize="14"
+                            VerticalOptions="Center"
+                            HorizontalTextAlignment="Center"
+                            SemanticProperties.Description="{Binding StatusDescription}">
+                            <Label.Triggers>
+                                <DataTrigger
+                                    TargetType="Label"
+                                    Binding="{Binding StatusLetter}"
+                                    Value="C">
+                                    <Setter
+                                        Property="TextColor"
+                                        Value="{AppThemeBinding Light=#1B7F3A, Dark=#6FCF97}" />
+                                </DataTrigger>
+                                <DataTrigger
+                                    TargetType="Label"
+                                    Binding="{Binding StatusLetter}"
+                                    Value="A">
+                                    <Setter
+                                        Property="TextColor"
+                                        Value="{AppThemeBinding Light=#0B6E99, Dark=#6EC6E6}" />
+                                </DataTrigger>
+                                <DataTrigger
+                                    TargetType="Label"
+                                    Binding="{Binding StatusLetter}"
+                                    Value="U">
+                                    <Setter
+                                        Property="TextColor"
+                                        Value="{AppThemeBinding Light=#A15C00, Dark=#F0B429}" />
+                                </DataTrigger>
+                                <DataTrigger
+                                    TargetType="Label"
+                                    Binding="{Binding StatusLetter}"
+                                    Value="F">
+                                    <Setter
+                                        Property="TextColor"
+                                        Value="{AppThemeBinding Light=#B42318, Dark=#F97066}" />
+                                </DataTrigger>
+                                <DataTrigger
+                                    TargetType="Label"
+                                    Binding="{Binding StatusLetter}"
+                                    Value="N">
+                                    <Setter
+                                        Property="TextColor"
+                                        Value="{AppThemeBinding Light=#475467, Dark=#98A2B3}" />
+                                </DataTrigger>
+                            </Label.Triggers>
+                        </Label>
+                    </Grid>
                 </DataTemplate>
             </CollectionView.ItemTemplate>
         </CollectionView>
 
         <VerticalStackLayout
             x:Name="EmptyStatePanel"
-            Grid.Row="2"
+            Grid.Row="3"
             IsVisible="False"
             Spacing="6"
-            Margin="0,24,0,0">
+            Margin="0,16,0,0">
             <Label
                 Text="No attendance history yet."
                 FontAttributes="Bold" />
