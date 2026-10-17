@@ -21,7 +21,10 @@ public sealed class AdMobBannerViewHandler : ViewHandler<AdMobBannerView, FrameL
 
 	private static readonly object InitGate = new();
 	private static Task? _mobileAdsInitTask;
-	private static int _activeLoadGeneration;
+
+	// Instance-scoped so one banner cannot retire another handler's in-flight load.
+	// A later BeginBannerLoadAsync on this same handler still supersedes its older load.
+	private int _activeLoadGeneration;
 
 	private AdView? _adView;
 	private int _loadGeneration;

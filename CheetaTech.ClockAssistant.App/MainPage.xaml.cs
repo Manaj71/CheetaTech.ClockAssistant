@@ -20,6 +20,7 @@ public partial class MainPage : ContentPage
 
     private readonly Label _attendanceDateValue;
     private readonly Label _shiftContextValue;
+    private readonly Label _exceptionInfoLabel;
     private readonly Label _clockInStatusValue;
     private readonly Label _clockInTimeValue;
     private readonly Label _clockOutStatusValue;
@@ -83,6 +84,9 @@ public partial class MainPage : ContentPage
         _shiftContextValue =
             (FindByName("ShiftContextValue") as Label)
             ?? throw new InvalidOperationException("ShiftContextValue is missing.");
+        _exceptionInfoLabel =
+            (FindByName("ExceptionInfoLabel") as Label)
+            ?? throw new InvalidOperationException("ExceptionInfoLabel is missing.");
         _clockInStatusValue =
             (FindByName("ClockInStatusValue") as Label)
             ?? throw new InvalidOperationException("ClockInStatusValue is missing.");
@@ -384,9 +388,16 @@ public partial class MainPage : ContentPage
                     : "I already Clocked Out elsewhere"
                 : null;
 
+        var exceptionMessage =
+            AttendanceHomeExceptionMessage.ForHome(
+                configuration,
+                evaluation.AttendanceDate,
+                evaluation.ClockInState);
+
         return new AttendanceHomeSnapshot(
             attendanceDateText,
             shiftContext,
+            exceptionMessage,
             clockInStatus,
             clockInTimeLabel,
             clockOutStatus,
@@ -402,6 +413,9 @@ public partial class MainPage : ContentPage
     {
         _attendanceDateValue.Text = snapshot.AttendanceDate;
         _shiftContextValue.Text = snapshot.ShiftContext;
+        _exceptionInfoLabel.Text = snapshot.ExceptionMessage ?? string.Empty;
+        _exceptionInfoLabel.IsVisible =
+            !string.IsNullOrWhiteSpace(snapshot.ExceptionMessage);
         _clockInStatusValue.Text = snapshot.ClockInStatus;
         _clockInTimeValue.Text = snapshot.ClockInTime;
         _clockOutStatusValue.Text = snapshot.ClockOutStatus;
@@ -424,6 +438,8 @@ public partial class MainPage : ContentPage
     {
         _attendanceDateValue.Text = string.Empty;
         _shiftContextValue.Text = string.Empty;
+        _exceptionInfoLabel.Text = string.Empty;
+        _exceptionInfoLabel.IsVisible = false;
         _clockInStatusValue.Text = "Unavailable";
         _clockInTimeValue.Text = string.Empty;
         _clockOutStatusValue.Text = "Unavailable";
@@ -728,6 +744,7 @@ public partial class MainPage : ContentPage
     private sealed record AttendanceHomeSnapshot(
         string AttendanceDate,
         string ShiftContext,
+        string? ExceptionMessage,
         string ClockInStatus,
         string ClockInTime,
         string ClockOutStatus,
@@ -744,6 +761,7 @@ public partial class MainPage : ContentPage
             return new AttendanceHomeSnapshot(
                 string.Empty,
                 string.Empty,
+                null,
                 "Unavailable",
                 string.Empty,
                 "Unavailable",

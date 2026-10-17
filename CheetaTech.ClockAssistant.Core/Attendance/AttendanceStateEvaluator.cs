@@ -90,24 +90,61 @@ public sealed class AttendanceStateEvaluator
             clockInState,
             clockOutState);
 
+        var clockInNotificationEligible =
+            (clockInState == AttendanceActionState.Due ||
+             (clockInState == AttendanceActionState.Failed &&
+              currentRecord.ClockInProviderRequestSent == false)) &&
+            !clockOutReminderDue;
+
+        var clockOutNotificationEligible =
+            clockOutReminderDue &&
+            currentRecord.ClockOutState != AttendanceActionState.Succeeded &&
+            currentRecord.ClockOutState != AttendanceActionState.InProgress &&
+            currentRecord.ClockOutState != AttendanceActionState.Skipped &&
+            currentRecord.ClockOutState != AttendanceActionState.Unknown &&
+            (currentRecord.ClockOutState != AttendanceActionState.Failed ||
+             currentRecord.ClockOutProviderRequestSent == false);
+
+        // Date exceptions suppress regular reminders only. Do not map to
+        // NotScheduled / Manual bans. Preserve Clock Out notification path
+        // after Clock In Succeeded; live InProgress is excluded from full
+        // suppress. Failed/Unknown are not "started" for Out-preserve.
+        if (HasScheduleException(configuration, attendanceDate) &&
+            currentRecord.ClockInState != AttendanceActionState.Succeeded &&
+            currentRecord.ClockInState != AttendanceActionState.InProgress)
+        {
+            clockInNotificationEligible = false;
+            clockOutNotificationEligible = false;
+        }
+
         return new AttendanceStateEvaluation(
             attendanceDate,
             dayState,
             clockInState,
             clockOutState,
-            ClockInNotificationEligible:
-                (clockInState == AttendanceActionState.Due ||
-                 (clockInState == AttendanceActionState.Failed &&
-                  currentRecord.ClockInProviderRequestSent == false)) &&
-                !clockOutReminderDue,
-            ClockOutNotificationEligible:
-                clockOutReminderDue &&
-                currentRecord.ClockOutState != AttendanceActionState.Succeeded &&
-                currentRecord.ClockOutState != AttendanceActionState.InProgress &&
-                currentRecord.ClockOutState != AttendanceActionState.Skipped &&
-                currentRecord.ClockOutState != AttendanceActionState.Unknown &&
-                (currentRecord.ClockOutState != AttendanceActionState.Failed ||
-                 currentRecord.ClockOutProviderRequestSent == false));
+            ClockInNotificationEligible: clockInNotificationEligible,
+            ClockOutNotificationEligible: clockOutNotificationEligible);
+    }
+
+    private static bool HasScheduleException(
+        ClockAssistantConfiguration configuration,
+        DateOnly attendanceDate)
+    {
+        var exceptions = configuration.ScheduleExceptions;
+        if (exceptions is null || exceptions.Count == 0)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < exceptions.Count; i++)
+        {
+            if (exceptions[i].Date == attendanceDate)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static AttendanceActionState EvaluateActionState(

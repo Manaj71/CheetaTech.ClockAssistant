@@ -2,189 +2,287 @@
 <ContentPage
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:controls="clr-namespace:CheetaTech.ClockAssistant.App.Controls"
     x:Class="CheetaTech.ClockAssistant.App.SettingsPage"
     Title="Settings">
 
     <Grid>
-        <ScrollView
+        <Grid
             x:Name="SettingsScrollView"
-            IsVisible="False">
-        <VerticalStackLayout
-            Padding="24"
-            Spacing="14"
-            MaximumWidthRequest="620"
-            HorizontalOptions="Center">
-
-            <Label
-                Text="Settings"
-                FontSize="28"
-                FontAttributes="Bold"
-                SemanticProperties.HeadingLevel="Level1" />
-
-            <Label
-                Text="Update your provider, account, and work schedule settings."
-                LineBreakMode="WordWrap" />
-
-            <Label Text="Provider" FontAttributes="Bold" />
-            <Picker
-                x:Name="ProviderTypePicker"
-                Title="Provider" />
-
-            <Label Text="Provider URL" FontAttributes="Bold" />
-            <Entry
-                x:Name="ProviderUrlEntry"
-                Placeholder="https://..."
-                Keyboard="Url" />
-
-            <Label Text="Username" FontAttributes="Bold" />
-            <Entry
-                x:Name="UsernameEntry"
-                Placeholder="Username"
-                />
-
-            <Label Text="New password" FontAttributes="Bold" />
-            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                <Entry
-                    x:Name="PasswordEntry"
-                    Grid.Column="0"
-                    Placeholder="Leave blank to keep current password"
-                    IsPassword="True"
-                    />
-                <Button
-                    x:Name="TogglePasswordButton"
-                    Grid.Column="1"
-                    Text="Show"
-                    Clicked="OnTogglePasswordClicked"
-                    VerticalOptions="Center" />
-            </Grid>
-
-            <Label
-                Text="Your saved password is hidden. Leave this field blank to keep it, or enter a new password to replace it."
-                FontSize="12"
-                LineBreakMode="WordWrap" />
-
-            <Label Text="Work days" FontAttributes="Bold" />
+            IsVisible="False"
+            RowDefinitions="Auto,*,Auto"
+            RowSpacing="0">
 
             <Grid
-                ColumnDefinitions="Auto,Auto,Auto,Auto"
-                RowDefinitions="Auto,Auto"
-                ColumnSpacing="14"
-                RowSpacing="8">
-
-                <HorizontalStackLayout Grid.Row="0" Grid.Column="0" Spacing="4">
-                    <CheckBox x:Name="MondayCheckBox" />
-                    <Label Text="Mon" VerticalOptions="Center" />
-                </HorizontalStackLayout>
-
-                <HorizontalStackLayout Grid.Row="0" Grid.Column="1" Spacing="4">
-                    <CheckBox x:Name="TuesdayCheckBox" />
-                    <Label Text="Tue" VerticalOptions="Center" />
-                </HorizontalStackLayout>
-
-                <HorizontalStackLayout Grid.Row="0" Grid.Column="2" Spacing="4">
-                    <CheckBox x:Name="WednesdayCheckBox" />
-                    <Label Text="Wed" VerticalOptions="Center" />
-                </HorizontalStackLayout>
-
-                <HorizontalStackLayout Grid.Row="0" Grid.Column="3" Spacing="4">
-                    <CheckBox x:Name="ThursdayCheckBox" />
-                    <Label Text="Thu" VerticalOptions="Center" />
-                </HorizontalStackLayout>
-
-                <HorizontalStackLayout Grid.Row="1" Grid.Column="0" Spacing="4">
-                    <CheckBox x:Name="FridayCheckBox" />
-                    <Label Text="Fri" VerticalOptions="Center" />
-                </HorizontalStackLayout>
-
-                <HorizontalStackLayout Grid.Row="1" Grid.Column="1" Spacing="4">
-                    <CheckBox x:Name="SaturdayCheckBox" />
-                    <Label Text="Sat" VerticalOptions="Center" />
-                </HorizontalStackLayout>
-
-                <HorizontalStackLayout Grid.Row="1" Grid.Column="2" Spacing="4">
-                    <CheckBox x:Name="SundayCheckBox" />
-                    <Label Text="Sun" VerticalOptions="Center" />
-                </HorizontalStackLayout>
-            </Grid>
-
-            <Grid
+                Grid.Row="0"
+                Padding="16,8,16,4"
                 ColumnDefinitions="*,*"
-                ColumnSpacing="16">
-
-                <VerticalStackLayout Grid.Column="0" Spacing="4">
-                    <Label Text="Clock In" FontAttributes="Bold" />
-                    <TimePicker x:Name="ClockInTimePicker" />
-                </VerticalStackLayout>
-
-                <VerticalStackLayout Grid.Column="1" Spacing="4">
-                    <Label Text="Clock Out" FontAttributes="Bold" />
-                    <TimePicker x:Name="ClockOutTimePicker" />
-                </VerticalStackLayout>
-            </Grid>
-
-            <Label Text="Time zone" FontAttributes="Bold" />
-            <Entry
-                x:Name="TimeZoneEntry"
-                Placeholder="America/Toronto"
-                />
-
-            <Label Text="Notification lead minutes" FontAttributes="Bold" />
-            <Entry
-                x:Name="NotificationLeadMinutesEntry"
-                Keyboard="Numeric"
-                Placeholder="15" />
-
-            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-                <VerticalStackLayout Grid.Column="0" Spacing="2">
-                    <Label Text="High-visibility reminders" FontAttributes="Bold" />
-                    <Label
-                        Text="Keep attendance reminders prominent until you handle them, where Android allows."
-                        FontSize="12"
-                        Opacity="0.75" />
-                </VerticalStackLayout>
-                <Switch
-                    x:Name="HighVisibilityRemindersSwitch"
-                    Grid.Column="1"
-                    IsToggled="True"
-                    VerticalOptions="Center"
-                    AutomationId="HighVisibilityReminders" />
-            </Grid>
-
-            <Label Text="Execution mode" FontAttributes="Bold" />
-            <Picker
-                x:Name="ExecutionModePicker"
-                Title="Execution mode" />
-
-            <Grid
-                ColumnDefinitions="*,*"
-                ColumnSpacing="12">
-
+                ColumnSpacing="12"
+                MaximumWidthRequest="620"
+                HorizontalOptions="Center"
+                VerticalOptions="Start">
                 <Button
                     x:Name="CancelSettingsButton"
                     Grid.Column="0"
                     Text="Cancel"
                     Clicked="OnCancelSettingsClicked"
                     AutomationId="CancelSettings" />
-
                 <Button
                     x:Name="SaveSettingsButton"
                     Grid.Column="1"
-                    Text="Save Settings"
-                    Clicked="OnSaveSettingsClicked" />
-
+                    Text="Save"
+                    IsEnabled="False"
+                    Clicked="OnSaveSettingsClicked"
+                    AutomationId="SaveSettings" />
             </Grid>
 
-            <ActivityIndicator
-                x:Name="BusyIndicator"
-                IsVisible="False"
-                IsRunning="False" />
+            <ScrollView
+                x:Name="SettingsFormScroll"
+                Grid.Row="1">
+                <VerticalStackLayout
+                    Padding="24,8,24,24"
+                    Spacing="14"
+                    MaximumWidthRequest="620"
+                    HorizontalOptions="Center">
 
-            <Label
-                x:Name="StatusLabel"
-                LineBreakMode="WordWrap" />
+                    <Label
+                        Text="Update your provider, account, and work schedule settings."
+                        LineBreakMode="WordWrap" />
 
-        </VerticalStackLayout>
-        </ScrollView>
+                    <Label Text="Provider" FontAttributes="Bold" />
+                    <Picker
+                        x:Name="ProviderTypePicker"
+                        Title="Provider" />
+
+                    <Label Text="Provider URL" FontAttributes="Bold" />
+                    <Entry
+                        x:Name="ProviderUrlEntry"
+                        Placeholder="https://..."
+                        Keyboard="Url" />
+
+                    <Label Text="Username" FontAttributes="Bold" />
+                    <Entry
+                        x:Name="UsernameEntry"
+                        Placeholder="Username" />
+
+                    <Label Text="New password" FontAttributes="Bold" />
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <Entry
+                            x:Name="PasswordEntry"
+                            Grid.Column="0"
+                            Placeholder="Leave blank to keep current password"
+                            IsPassword="True" />
+                        <Button
+                            x:Name="TogglePasswordButton"
+                            Grid.Column="1"
+                            Text="Show"
+                            Clicked="OnTogglePasswordClicked"
+                            VerticalOptions="Center" />
+                    </Grid>
+
+                    <Label
+                        Text="Your saved password is hidden. Leave this field blank to keep it, or enter a new password to replace it."
+                        FontSize="12"
+                        LineBreakMode="WordWrap" />
+
+                    <Label Text="Work days" FontAttributes="Bold" />
+
+                    <Grid
+                        ColumnDefinitions="Auto,Auto,Auto,Auto"
+                        RowDefinitions="Auto,Auto"
+                        ColumnSpacing="14"
+                        RowSpacing="8">
+
+                        <HorizontalStackLayout Grid.Row="0" Grid.Column="0" Spacing="4">
+                            <CheckBox x:Name="MondayCheckBox" />
+                            <Label Text="Mon" VerticalOptions="Center" />
+                        </HorizontalStackLayout>
+
+                        <HorizontalStackLayout Grid.Row="0" Grid.Column="1" Spacing="4">
+                            <CheckBox x:Name="TuesdayCheckBox" />
+                            <Label Text="Tue" VerticalOptions="Center" />
+                        </HorizontalStackLayout>
+
+                        <HorizontalStackLayout Grid.Row="0" Grid.Column="2" Spacing="4">
+                            <CheckBox x:Name="WednesdayCheckBox" />
+                            <Label Text="Wed" VerticalOptions="Center" />
+                        </HorizontalStackLayout>
+
+                        <HorizontalStackLayout Grid.Row="0" Grid.Column="3" Spacing="4">
+                            <CheckBox x:Name="ThursdayCheckBox" />
+                            <Label Text="Thu" VerticalOptions="Center" />
+                        </HorizontalStackLayout>
+
+                        <HorizontalStackLayout Grid.Row="1" Grid.Column="0" Spacing="4">
+                            <CheckBox x:Name="FridayCheckBox" />
+                            <Label Text="Fri" VerticalOptions="Center" />
+                        </HorizontalStackLayout>
+
+                        <HorizontalStackLayout Grid.Row="1" Grid.Column="1" Spacing="4">
+                            <CheckBox x:Name="SaturdayCheckBox" />
+                            <Label Text="Sat" VerticalOptions="Center" />
+                        </HorizontalStackLayout>
+
+                        <HorizontalStackLayout Grid.Row="1" Grid.Column="2" Spacing="4">
+                            <CheckBox x:Name="SundayCheckBox" />
+                            <Label Text="Sun" VerticalOptions="Center" />
+                        </HorizontalStackLayout>
+                    </Grid>
+
+                    <Grid
+                        ColumnDefinitions="*,*"
+                        ColumnSpacing="16">
+
+                        <VerticalStackLayout Grid.Column="0" Spacing="4">
+                            <Label Text="Clock In" FontAttributes="Bold" />
+                            <TimePicker x:Name="ClockInTimePicker" />
+                        </VerticalStackLayout>
+
+                        <VerticalStackLayout Grid.Column="1" Spacing="4">
+                            <Label Text="Clock Out" FontAttributes="Bold" />
+                            <TimePicker x:Name="ClockOutTimePicker" />
+                        </VerticalStackLayout>
+                    </Grid>
+
+                    <Label Text="Time zone" FontAttributes="Bold" />
+                    <Entry
+                        x:Name="TimeZoneEntry"
+                        Placeholder="America/Toronto" />
+
+                    <Label Text="Notification lead minutes" FontAttributes="Bold" />
+                    <Entry
+                        x:Name="NotificationLeadMinutesEntry"
+                        Keyboard="Numeric"
+                        Placeholder="15" />
+
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                        <VerticalStackLayout Grid.Column="0" Spacing="2">
+                            <Label Text="High-visibility reminders" FontAttributes="Bold" />
+                            <Label
+                                Text="Keep attendance reminders prominent until you handle them, where Android allows."
+                                FontSize="12"
+                                LineBreakMode="WordWrap"
+                                Opacity="0.75" />
+                        </VerticalStackLayout>
+                        <Switch
+                            x:Name="HighVisibilityRemindersSwitch"
+                            Grid.Column="1"
+                            IsToggled="True"
+                            VerticalOptions="Center"
+                            AutomationId="HighVisibilityReminders" />
+                    </Grid>
+
+                    <Label Text="Execution mode" FontAttributes="Bold" />
+                    <Picker
+                        x:Name="ExecutionModePicker"
+                        Title="Execution mode" />
+
+                    <Label
+                        Text="Schedule Exceptions"
+                        FontAttributes="Bold"
+                        Margin="0,8,0,0" />
+                    <Label
+                        Text="Schedule exceptions control ShiftPilot reminders only. They do not update your employer's attendance or leave records."
+                        FontSize="12"
+                        LineBreakMode="WordWrap"
+                        Opacity="0.85" />
+
+                    <Label Text="Exception date" FontAttributes="Bold" />
+                    <DatePicker x:Name="ExceptionDatePicker" />
+
+                    <Label Text="Exception type" FontAttributes="Bold" />
+                    <Picker
+                        x:Name="ExceptionTypePicker"
+                        Title="Exception type" />
+
+                    <Button
+                        x:Name="AddOrUpdateExceptionButton"
+                        Text="Add or update exception"
+                        Clicked="OnAddOrUpdateExceptionClicked"
+                        AutomationId="AddOrUpdateException" />
+
+                    <VerticalStackLayout
+                        x:Name="ExceptionsLayout"
+                        Spacing="0">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate>
+                                <FlexLayout
+                                    Direction="Row"
+                                    Wrap="Wrap"
+                                    AlignItems="Center"
+                                    JustifyContent="SpaceBetween"
+                                    HorizontalOptions="Fill"
+                                    Padding="0,6">
+                                    <VerticalStackLayout
+                                        Spacing="2"
+                                        HorizontalOptions="Fill"
+                                        FlexLayout.Grow="1"
+                                        FlexLayout.Shrink="1"
+                                        FlexLayout.Basis="0">
+                                        <Label
+                                            Text="{Binding DateLabel}"
+                                            FontAttributes="Bold"
+                                            LineBreakMode="WordWrap"
+                                            HorizontalOptions="Fill" />
+                                        <Label
+                                            Text="{Binding TypeLabel}"
+                                            FontSize="13"
+                                            Opacity="0.85"
+                                            LineBreakMode="WordWrap"
+                                            HorizontalOptions="Fill" />
+                                    </VerticalStackLayout>
+                                    <HorizontalStackLayout
+                                        Spacing="8"
+                                        FlexLayout.Shrink="0">
+                                        <Button
+                                            Text="Edit"
+                                            Clicked="OnEditExceptionClicked"
+                                            Padding="12,6" />
+                                        <Button
+                                            Text="Remove"
+                                            Clicked="OnRemoveExceptionClicked"
+                                            Padding="12,6" />
+                                    </HorizontalStackLayout>
+                                </FlexLayout>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+
+                    <Label
+                        x:Name="UnsavedChangesLabel"
+                        Text="Unsaved changes"
+                        FontAttributes="Bold"
+                        FontSize="13"
+                        LineBreakMode="WordWrap"
+                        IsVisible="False"
+                        AutomationId="UnsavedChanges" />
+
+                    <ActivityIndicator
+                        x:Name="BusyIndicator"
+                        IsVisible="False"
+                        IsRunning="False" />
+
+                    <Label
+                        x:Name="StatusLabel"
+                        Text=""
+                        LineBreakMode="WordWrap"
+                        HorizontalOptions="Fill">
+                        <Label.Triggers>
+                            <Trigger TargetType="Label" Property="Text" Value="">
+                                <Setter Property="IsVisible" Value="False" />
+                            </Trigger>
+                        </Label.Triggers>
+                    </Label>
+
+                </VerticalStackLayout>
+            </ScrollView>
+
+            <controls:AdMobBannerView
+                Grid.Row="2"
+                Margin="0,0,0,12"
+                VerticalOptions="End"
+                HorizontalOptions="Fill" />
+        </Grid>
 
         <VerticalStackLayout
             x:Name="LockedPanel"

@@ -1,26 +1,50 @@
+using System.Globalization;
+using CheetaTech.ClockAssistant.App.Services.Security;
+using CheetaTech.ClockAssistant.Core.Attendance;
 using CheetaTech.ClockAssistant.Core.Configuration;
 using CheetaTech.ClockAssistant.Core.Security;
-using CheetaTech.ClockAssistant.App.Services.Security;
 
 namespace CheetaTech.ClockAssistant.App;
 
 public partial class SettingsPage : ContentPage
 {
+    private const string HomeRoute = "//Authenticated/Home/MainPage";
+    private const string ContinueEditingChoice = "Continue Editing";
+    private const string SaveChoice = "Save";
+    private const string DiscardChoice = "Discard";
+
+    private static readonly ScheduleExceptionType[] ExceptionTypes =
+    [
+        ScheduleExceptionType.StatutoryHoliday,
+        ScheduleExceptionType.Vacation,
+        ScheduleExceptionType.SickDay,
+        ScheduleExceptionType.RegularDayOff,
+        ScheduleExceptionType.Other
+    ];
+
     private readonly IClockAssistantConfigurationStore _configurationStore;
     private readonly ICredentialStore _credentialStore;
     private readonly ISetupPersistenceService _setupPersistenceService;
     private readonly IDeviceAuthenticationService _deviceAuthenticationService;
+    private readonly IAttendanceReminderStartupCoordinator _reminderCoordinator;
 
     private bool _authenticated;
     private bool _authenticationInProgress;
-
     private bool _loaded;
+    private bool _suppressDirtyRefresh;
+    private bool _allowNavigation;
+    private int _leaveGate;
+    private Shell? _subscribedShell;
+    private SettingsFormSnapshot? _baseline;
+    private IReadOnlyList<ScheduleDayException> _scheduleExceptions =
+        Array.Empty<ScheduleDayException>();
 
     public SettingsPage(
         IClockAssistantConfigurationStore configurationStore,
         ICredentialStore credentialStore,
         ISetupPersistenceService setupPersistenceService,
-        IDeviceAuthenticationService deviceAuthenticationService)
+        IDeviceAuthenticationService deviceAuthenticationService,
+        IAttendanceReminderStartupCoordinator reminderCoordinator)
     {
         InitializeComponent();
 
@@ -41,30 +65,353 @@ public partial class SettingsPage : ContentPage
             ?? throw new ArgumentNullException(
                 nameof(deviceAuthenticationService));
 
+        _reminderCoordinator =
+            reminderCoordinator
+            ?? throw new ArgumentNullException(nameof(reminderCoordinator));
+
         ProviderTypePicker.ItemsSource = new[] { "UKG" };
         ExecutionModePicker.ItemsSource =
             Enum.GetNames<ClockExecutionMode>();
+
+        ExceptionTypePicker.ItemsSource =
+            ExceptionTypes
+                .Select(GetExceptionTypeLabel)
+                .ToArray();
+        ExceptionTypePicker.SelectedIndex = 0;
+        ExceptionDatePicker.Date = DateTime.Today;
+
+        WireDirtyTracking();
+        RefreshDirtyState();
     }
 
     protected override async void OnAppearing()
     {
         base.OnAppearing();
 
+        SubscribeToShellNavigation();
         await UnlockSettingsAsync();
     }
 
     protected override void OnDisappearing()
     {
+        UnsubscribeFromShellNavigation();
+
         base.OnDisappearing();
 
         _authenticated = false;
-        _loaded = false;
         SettingsScrollView.IsVisible = false;
         LockedPanel.IsVisible = true;
+
+        // Keep the loaded form in memory. Clearing _loaded would reload
+        // from storage on the next unlock and drop unsaved edits.
+        var hadReplacementPassword =
+            !string.IsNullOrEmpty(PasswordEntry.Text);
 
         PasswordEntry.Text = string.Empty;
         PasswordEntry.IsPassword = true;
         TogglePasswordButton.Text = "Show";
+
+        if (hadReplacementPassword)
+        {
+            ShowStatus(
+                "The new password was cleared when Settings locked. Enter it again before saving.");
+        }
+    }
+
+    protected override bool OnBackButtonPressed()
+    {
+        if (BusyIndicator.IsRunning)
+        {
+            return true;
+        }
+
+        if (_allowNavigation || !ShouldGuardLeave())
+        {
+            return base.OnBackButtonPressed();
+        }
+
+        if (Volatile.Read(ref _leaveGate) != 0)
+        {
+            return true;
+        }
+
+        Dispatcher.Dispatch(
+            async () => await RequestLeaveAsync(route: null, useShellBack: true));
+
+        return true;
+    }
+
+    private void SubscribeToShellNavigation()
+    {
+        if (Shell.Current is not Shell shell)
+        {
+            return;
+        }
+
+        if (ReferenceEquals(_subscribedShell, shell))
+        {
+            return;
+        }
+
+        UnsubscribeFromShellNavigation();
+        shell.Navigating += OnShellNavigating;
+        _subscribedShell = shell;
+    }
+
+    private void UnsubscribeFromShellNavigation()
+    {
+        if (_subscribedShell is null)
+        {
+            return;
+        }
+
+        _subscribedShell.Navigating -= OnShellNavigating;
+        _subscribedShell = null;
+    }
+
+    private void OnShellNavigating(
+        object? sender,
+        ShellNavigatingEventArgs e)
+    {
+        if (_allowNavigation || !IsLeavingSettings(e))
+        {
+            return;
+        }
+
+        if (BusyIndicator.IsRunning)
+        {
+            if (e.CanCancel)
+            {
+                e.Cancel();
+            }
+
+            return;
+        }
+
+        if (!ShouldGuardLeave())
+        {
+            return;
+        }
+
+        var target =
+            e.Target?.Location?.OriginalString;
+
+        if (IsSettingsRoute(target))
+        {
+            return;
+        }
+
+        if (!e.CanCancel)
+        {
+            // Navigation cannot be stopped. Non-secret edits stay on this
+            // page instance; the replacement password is cleared on disappear.
+            return;
+        }
+
+        if (Volatile.Read(ref _leaveGate) != 0)
+        {
+            e.Cancel();
+            return;
+        }
+
+        e.Cancel();
+
+        var useShellBack =
+            e.Source is ShellNavigationSource.Pop
+                or ShellNavigationSource.PopToRoot;
+
+        var route =
+            useShellBack
+                ? null
+                : target;
+
+        Dispatcher.Dispatch(
+            async () => await RequestLeaveAsync(route, useShellBack));
+    }
+
+    private bool IsLeavingSettings(ShellNavigatingEventArgs e)
+    {
+        if (ReferenceEquals(Shell.Current?.CurrentPage, this))
+        {
+            return true;
+        }
+
+        var current =
+            e.Current?.Location?.OriginalString;
+
+        return IsSettingsRoute(current);
+    }
+
+    private static bool IsSettingsRoute(string? route)
+    {
+        return route?.Contains(
+                "SettingsPage",
+                StringComparison.Ordinal)
+            == true;
+    }
+
+    private bool ShouldGuardLeave()
+    {
+        return _loaded
+            && _baseline is not null
+            && IsFormDirty()
+            && !BusyIndicator.IsRunning;
+    }
+
+    private async Task RequestLeaveAsync(
+        string? route,
+        bool useShellBack)
+    {
+        if (!TryEnterLeaveGate())
+        {
+            return;
+        }
+
+        try
+        {
+            if (BusyIndicator.IsRunning)
+            {
+                return;
+            }
+
+            if (!ShouldGuardLeave())
+            {
+                await NavigateAsync(
+                    route,
+                    useShellBack,
+                    discarded: false,
+                    saved: false);
+
+                return;
+            }
+
+            var choice =
+                await DisplayActionSheetAsync(
+                    "Unsaved changes",
+                    ContinueEditingChoice,
+                    destruction: null,
+                    SaveChoice,
+                    DiscardChoice);
+
+            if (choice == SaveChoice)
+            {
+                var followUp = await SaveSettingsCoreAsync();
+
+                if (followUp == SettingsSaveFollowUp.ReadyToLeave)
+                {
+                    await NavigateAsync(
+                        route,
+                        useShellBack,
+                        discarded: false,
+                        saved: true);
+                }
+
+                return;
+            }
+
+            if (choice == DiscardChoice)
+            {
+                await DiscardEditsAsync();
+
+                if (!_loaded)
+                {
+                    return;
+                }
+
+                await NavigateAsync(
+                    route,
+                    useShellBack,
+                    discarded: true,
+                    saved: false);
+            }
+        }
+        finally
+        {
+            ExitLeaveGate();
+        }
+    }
+
+    private async Task NavigateAsync(
+        string? route,
+        bool useShellBack,
+        bool discarded,
+        bool saved)
+    {
+        if (Shell.Current is not Shell shell)
+        {
+            ShowStatus(NavigationFailureMessage(discarded, saved));
+            return;
+        }
+
+        _allowNavigation = true;
+
+        try
+        {
+            if (!useShellBack
+                && !string.IsNullOrWhiteSpace(route))
+            {
+                await shell.GoToAsync(route);
+                return;
+            }
+
+            var handled = shell.SendBackButtonPressed();
+
+            if (handled)
+            {
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(route))
+            {
+                await shell.GoToAsync(route);
+                return;
+            }
+
+            MoveApplicationToBackground();
+        }
+        catch
+        {
+            ShowStatus(NavigationFailureMessage(discarded, saved));
+        }
+        finally
+        {
+            _allowNavigation = false;
+        }
+    }
+
+    private static string NavigationFailureMessage(
+        bool discarded,
+        bool saved)
+    {
+        if (saved)
+        {
+            return "Settings were saved, but the selected page could not be opened.";
+        }
+
+        if (discarded)
+        {
+            return "Your unsaved changes were discarded, but the selected page could not be opened.";
+        }
+
+        return "The selected page could not be opened.";
+    }
+
+    private static void MoveApplicationToBackground()
+    {
+#if ANDROID
+        Microsoft.Maui.ApplicationModel.Platform.CurrentActivity
+            ?.MoveTaskToBack(true);
+#endif
+    }
+
+    private bool TryEnterLeaveGate()
+    {
+        return Interlocked.CompareExchange(ref _leaveGate, 1, 0) == 0;
+    }
+
+    private void ExitLeaveGate()
+    {
+        Interlocked.Exchange(ref _leaveGate, 0);
     }
 
     private async void OnUnlockSettingsClicked(
@@ -127,6 +474,15 @@ public partial class SettingsPage : ContentPage
             {
                 await LoadCurrentSettingsAsync();
             }
+            else
+            {
+                RefreshDirtyState();
+            }
+
+            if (!string.IsNullOrEmpty(StatusLabel.Text))
+            {
+                await ScrollStatusIntoViewAsync();
+            }
         }
         catch
         {
@@ -141,6 +497,7 @@ public partial class SettingsPage : ContentPage
 
     private async Task LoadCurrentSettingsAsync()
     {
+        _suppressDirtyRefresh = true;
         SetBusy(true);
 
         try
@@ -158,6 +515,7 @@ public partial class SettingsPage : ContentPage
                 StatusLabel.Text =
                     "Saved configuration could not be loaded.";
 
+                _loaded = false;
                 return;
             }
 
@@ -209,6 +567,17 @@ public partial class SettingsPage : ContentPage
             ExecutionModePicker.SelectedItem =
                 executionModeName;
 
+            _scheduleExceptions =
+                (configuration.ScheduleExceptions
+                    ?? Array.Empty<ScheduleDayException>())
+                .OrderBy(item => item.Date)
+                .ToArray();
+
+            RefreshExceptionsList();
+            ExceptionDatePicker.Date = DateTime.Today;
+            ExceptionTypePicker.SelectedIndex = 0;
+
+            _baseline = CaptureCurrentSnapshot();
             _loaded = true;
         }
         catch
@@ -216,11 +585,24 @@ public partial class SettingsPage : ContentPage
             // Do not surface potentially sensitive exception/provider details.
             StatusLabel.Text =
                 "Settings could not be loaded.";
+
+            _loaded = false;
         }
         finally
         {
+            _suppressDirtyRefresh = false;
             SetBusy(false);
         }
+    }
+
+    private async Task DiscardEditsAsync()
+    {
+        PasswordEntry.Text = string.Empty;
+        PasswordEntry.IsPassword = true;
+        TogglePasswordButton.Text = "Show";
+        StatusLabel.Text = string.Empty;
+        _loaded = false;
+        await LoadCurrentSettingsAsync();
     }
 
     private async void OnCancelSettingsClicked(
@@ -232,34 +614,91 @@ public partial class SettingsPage : ContentPage
             return;
         }
 
-        // Cancel never persists. Reload the last trusted values so every
-        // unsaved field edit is discarded before leaving this page.
-        PasswordEntry.Text = string.Empty;
-        PasswordEntry.IsPassword = true;
-        TogglePasswordButton.Text = "Show";
-        StatusLabel.Text = string.Empty;
+        await RequestLeaveAsync(HomeRoute, useShellBack: false);
+    }
 
-        _loaded = false;
-        await LoadCurrentSettingsAsync();
-
-        if (Shell.Current is null)
+    private void OnAddOrUpdateExceptionClicked(
+        object? sender,
+        EventArgs e)
+    {
+        if (BusyIndicator.IsRunning)
         {
-            StatusLabel.Text =
-                "Your unsaved changes were discarded, but Home could not be opened.";
-
             return;
         }
 
-        try
+        if (ExceptionTypePicker.SelectedIndex < 0
+            || ExceptionTypePicker.SelectedIndex >= ExceptionTypes.Length)
         {
-            await Shell.Current.GoToAsync("//Authenticated/Home/MainPage");
+            StatusLabel.Text = "Select an exception type.";
+            return;
         }
-        catch
-        {
-            StatusLabel.Text =
-                "Your unsaved changes were discarded, but Home could not be opened.";
-        }
+
+        var selectedDate =
+            ExceptionDatePicker.Date
+            ?? DateTime.Today;
+
+        var date = DateOnly.FromDateTime(selectedDate);
+        var type = ExceptionTypes[ExceptionTypePicker.SelectedIndex];
+
+        _scheduleExceptions =
+            ScheduleExceptionListEditor.Upsert(
+                _scheduleExceptions,
+                date,
+                type);
+
+        RefreshExceptionsList();
+        RefreshDirtyState();
+        StatusLabel.Text =
+            $"Exception for {date.ToString("D", CultureInfo.CurrentCulture)} ready to save.";
     }
+
+    private void OnEditExceptionClicked(
+        object? sender,
+        EventArgs e)
+    {
+        if (BusyIndicator.IsRunning)
+        {
+            return;
+        }
+
+        if (sender is not Button { BindingContext: ScheduleExceptionRow row })
+        {
+            return;
+        }
+
+        ExceptionDatePicker.Date =
+            row.Date.ToDateTime(TimeOnly.MinValue);
+        ExceptionTypePicker.SelectedIndex =
+            Array.IndexOf(ExceptionTypes, row.Type);
+        StatusLabel.Text =
+            "Edit the type if needed, then tap Add or update exception.";
+    }
+
+    private void OnRemoveExceptionClicked(
+        object? sender,
+        EventArgs e)
+    {
+        if (BusyIndicator.IsRunning)
+        {
+            return;
+        }
+
+        if (sender is not Button { BindingContext: ScheduleExceptionRow row })
+        {
+            return;
+        }
+
+        _scheduleExceptions =
+            ScheduleExceptionListEditor.Remove(
+                _scheduleExceptions,
+                row.Date);
+
+        RefreshExceptionsList();
+        RefreshDirtyState();
+        StatusLabel.Text =
+            $"Removed exception for {row.Date.ToString("D", CultureInfo.CurrentCulture)}. Save Settings to apply.";
+    }
+
     private async void OnSaveSettingsClicked(
         object? sender,
         EventArgs e)
@@ -267,6 +706,16 @@ public partial class SettingsPage : ContentPage
         if (BusyIndicator.IsRunning)
         {
             return;
+        }
+
+        await SaveSettingsCoreAsync();
+    }
+
+    private async Task<SettingsSaveFollowUp> SaveSettingsCoreAsync()
+    {
+        if (BusyIndicator.IsRunning)
+        {
+            return SettingsSaveFollowUp.StayedOnPage;
         }
 
         SetBusy(true);
@@ -293,26 +742,26 @@ public partial class SettingsPage : ContentPage
 
             if (string.IsNullOrWhiteSpace(providerType))
             {
-                StatusLabel.Text = "Provider is required.";
-                return;
+                ShowStatus("Provider is required.");
+                return SettingsSaveFollowUp.StayedOnPage;
             }
 
             if (string.IsNullOrWhiteSpace(providerUrl))
             {
-                StatusLabel.Text = "Provider URL is required.";
-                return;
+                ShowStatus("Provider URL is required.");
+                return SettingsSaveFollowUp.StayedOnPage;
             }
 
             if (string.IsNullOrWhiteSpace(username))
             {
-                StatusLabel.Text = "Username is required.";
-                return;
+                ShowStatus("Username is required.");
+                return SettingsSaveFollowUp.StayedOnPage;
             }
 
             if (string.IsNullOrWhiteSpace(timeZoneId))
             {
-                StatusLabel.Text = "Time zone is required.";
-                return;
+                ShowStatus("Time zone is required.");
+                return SettingsSaveFollowUp.StayedOnPage;
             }
 
             if (!int.TryParse(
@@ -320,9 +769,9 @@ public partial class SettingsPage : ContentPage
                     out var notificationLeadMinutes)
                 || notificationLeadMinutes < 0)
             {
-                StatusLabel.Text =
-                    "Notification lead minutes must be zero or greater.";
-                return;
+                ShowStatus(
+                    "Notification lead minutes must be zero or greater.");
+                return SettingsSaveFollowUp.StayedOnPage;
             }
 
             if (ExecutionModePicker.SelectedItem is not string executionModeText
@@ -331,8 +780,8 @@ public partial class SettingsPage : ContentPage
                     ignoreCase: false,
                     out var executionMode))
             {
-                StatusLabel.Text = "Execution mode is required.";
-                return;
+                ShowStatus("Execution mode is required.");
+                return SettingsSaveFollowUp.StayedOnPage;
             }
 
             var workDays =
@@ -340,9 +789,9 @@ public partial class SettingsPage : ContentPage
 
             if (workDays.Count == 0)
             {
-                StatusLabel.Text =
-                    "Select at least one work day.";
-                return;
+                ShowStatus(
+                    "Select at least one work day.");
+                return SettingsSaveFollowUp.StayedOnPage;
             }
 
             var currentCredentials =
@@ -350,9 +799,9 @@ public partial class SettingsPage : ContentPage
 
             if (currentCredentials is null)
             {
-                StatusLabel.Text =
-                    "Stored credentials are not available.";
-                return;
+                ShowStatus(
+                    "Stored credentials are not available.");
+                return SettingsSaveFollowUp.StayedOnPage;
             }
 
             var requestedPassword =
@@ -370,6 +819,7 @@ public partial class SettingsPage : ContentPage
                     ProviderType = providerType,
                     ProviderUrl = providerUrl,
                     WorkDays = workDays,
+                    ScheduleExceptions = _scheduleExceptions,
                     ClockInTime =
                         ClockInTimePicker.Time is TimeSpan clockInSpan
                             ? TimeOnly.FromTimeSpan(clockInSpan)
@@ -400,32 +850,56 @@ public partial class SettingsPage : ContentPage
                 || !result.ConfigurationSaved
                 || !result.CredentialsSaved)
             {
-                StatusLabel.Text =
-                    "Settings could not be saved. Your previous settings are unchanged.";
+                ShowStatus(
+                    "Settings could not be saved. Your previous settings are unchanged.");
 
-                return;
+                return SettingsSaveFollowUp.StayedOnPage;
             }
 
             if (result.ProviderValidationPerformed)
             {
-                StatusLabel.Text =
-                    "Settings were saved, but an unexpected issue was detected.";
+                ShowStatus(
+                    "Settings were saved, but an unexpected issue was detected.");
 
-                return;
+                return SettingsSaveFollowUp.StayedOnPage;
             }
 
             PasswordEntry.Text = string.Empty;
             PasswordEntry.IsPassword = true;
             TogglePasswordButton.Text = "Show";
+            _baseline = CaptureCurrentSnapshot();
 
-            StatusLabel.Text =
-                "Settings saved successfully.";
+            AttendanceReminderRescheduleResult rescheduleResult;
+
+            try
+            {
+                rescheduleResult =
+                    await _reminderCoordinator
+                        .RescheduleAfterConfigurationChangeAsync(
+                            DateTimeOffset.UtcNow);
+            }
+            catch
+            {
+                ShowStatus(
+                    "Settings saved, but reminders could not be updated. Your previous reminder may still be active.");
+                return SettingsSaveFollowUp.StayedOnPage;
+            }
+
+            ShowStatus(
+                AttendanceReminderRescheduleUserMessage.ForSuccessfulSave(
+                    rescheduleResult));
+
+            return rescheduleResult
+                    is AttendanceReminderRescheduleResult.Scheduled
+                    or AttendanceReminderRescheduleResult.Cancelled
+                ? SettingsSaveFollowUp.ReadyToLeave
+                : SettingsSaveFollowUp.StayedOnPage;
         }
         catch
         {
             // Keep exception/provider details out of the UI.
-            StatusLabel.Text =
-                "Settings could not be saved.";
+            ShowStatus("Settings could not be saved.");
+            return SettingsSaveFollowUp.StayedOnPage;
         }
         finally
         {
@@ -444,6 +918,171 @@ public partial class SettingsPage : ContentPage
             PasswordEntry.IsPassword
                 ? "Show"
                 : "Hide";
+    }
+
+    private void WireDirtyTracking()
+    {
+        ProviderTypePicker.SelectedIndexChanged +=
+            OnEditableValueChanged;
+        ProviderUrlEntry.TextChanged +=
+            OnEditableTextChanged;
+        UsernameEntry.TextChanged +=
+            OnEditableTextChanged;
+        PasswordEntry.TextChanged +=
+            OnEditableTextChanged;
+        TimeZoneEntry.TextChanged +=
+            OnEditableTextChanged;
+        NotificationLeadMinutesEntry.TextChanged +=
+            OnEditableTextChanged;
+        ExecutionModePicker.SelectedIndexChanged +=
+            OnEditableValueChanged;
+        HighVisibilityRemindersSwitch.Toggled +=
+            OnReminderSwitchToggled;
+
+        MondayCheckBox.CheckedChanged += OnWorkDayCheckedChanged;
+        TuesdayCheckBox.CheckedChanged += OnWorkDayCheckedChanged;
+        WednesdayCheckBox.CheckedChanged += OnWorkDayCheckedChanged;
+        ThursdayCheckBox.CheckedChanged += OnWorkDayCheckedChanged;
+        FridayCheckBox.CheckedChanged += OnWorkDayCheckedChanged;
+        SaturdayCheckBox.CheckedChanged += OnWorkDayCheckedChanged;
+        SundayCheckBox.CheckedChanged += OnWorkDayCheckedChanged;
+
+        ClockInTimePicker.PropertyChanged += OnTimePickerPropertyChanged;
+        ClockOutTimePicker.PropertyChanged += OnTimePickerPropertyChanged;
+    }
+
+    private void OnEditableValueChanged(object? sender, EventArgs e)
+    {
+        RefreshDirtyState();
+    }
+
+    private void OnEditableTextChanged(
+        object? sender,
+        TextChangedEventArgs e)
+    {
+        RefreshDirtyState();
+    }
+
+    private void OnWorkDayCheckedChanged(
+        object? sender,
+        CheckedChangedEventArgs e)
+    {
+        RefreshDirtyState();
+    }
+
+    private void OnReminderSwitchToggled(
+        object? sender,
+        ToggledEventArgs e)
+    {
+        RefreshDirtyState();
+    }
+
+    private void OnTimePickerPropertyChanged(
+        object? sender,
+        System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == TimePicker.TimeProperty.PropertyName)
+        {
+            RefreshDirtyState();
+        }
+    }
+
+    private void RefreshDirtyState()
+    {
+        if (_suppressDirtyRefresh)
+        {
+            SaveSettingsButton.IsEnabled = false;
+            return;
+        }
+
+        var dirty = IsFormDirty();
+        UnsavedChangesLabel.IsVisible = dirty;
+        SaveSettingsButton.IsEnabled =
+            dirty && !BusyIndicator.IsRunning;
+    }
+
+    private bool IsFormDirty()
+    {
+        if (_baseline is null)
+        {
+            return false;
+        }
+
+        return !SettingsFormSnapshot.AreEquivalent(
+            _baseline,
+            CaptureCurrentSnapshot());
+    }
+
+    private SettingsFormSnapshot CaptureCurrentSnapshot()
+    {
+        return SettingsFormSnapshot.Capture(
+            ProviderTypePicker.SelectedItem as string,
+            ProviderUrlEntry.Text,
+            UsernameEntry.Text,
+            !string.IsNullOrEmpty(PasswordEntry.Text),
+            GetSelectedWorkDays(),
+            ClockInTimePicker.Time,
+            ClockOutTimePicker.Time,
+            TimeZoneEntry.Text,
+            NotificationLeadMinutesEntry.Text,
+            HighVisibilityRemindersSwitch.IsToggled,
+            ExecutionModePicker.SelectedItem as string,
+            _scheduleExceptions);
+    }
+
+    private void ShowStatus(string message)
+    {
+        StatusLabel.Text = message;
+
+        if (!string.IsNullOrEmpty(message))
+        {
+            _ = ScrollStatusIntoViewAsync();
+        }
+    }
+
+    private async Task ScrollStatusIntoViewAsync()
+    {
+        try
+        {
+            await SettingsFormScroll.ScrollToAsync(
+                StatusLabel,
+                ScrollToPosition.MakeVisible,
+                false);
+        }
+        catch
+        {
+            // The form may be detaching during navigation.
+        }
+    }
+
+    private void RefreshExceptionsList()
+    {
+        BindableLayout.SetItemsSource(
+            ExceptionsLayout,
+            _scheduleExceptions
+                .Select(item =>
+                    new ScheduleExceptionRow(
+                        item.Date,
+                        item.Type,
+                        item.Date.ToString(
+                            "D",
+                            CultureInfo.CurrentCulture),
+                        GetExceptionTypeLabel(item.Type)))
+                .ToArray());
+    }
+
+    private static string GetExceptionTypeLabel(
+        ScheduleExceptionType type)
+    {
+        return type switch
+        {
+            ScheduleExceptionType.StatutoryHoliday => "Statutory Holiday",
+            ScheduleExceptionType.Vacation => "Vacation",
+            ScheduleExceptionType.SickDay => "Sick Day",
+            ScheduleExceptionType.RegularDayOff => "Regular Day Off",
+            ScheduleExceptionType.Other => "Other",
+            _ => type.ToString()
+        };
     }
 
     private void SetWorkDays(
@@ -520,6 +1159,41 @@ public partial class SettingsPage : ContentPage
         BusyIndicator.IsVisible = isBusy;
         BusyIndicator.IsRunning = isBusy;
         CancelSettingsButton.IsEnabled = !isBusy;
-        SaveSettingsButton.IsEnabled = !isBusy;
+        AddOrUpdateExceptionButton.IsEnabled = !isBusy;
+        ExceptionDatePicker.IsEnabled = !isBusy;
+        ExceptionTypePicker.IsEnabled = !isBusy;
+        RefreshDirtyState();
+
+        if (isBusy)
+        {
+            _ = ScrollBusyIndicatorIntoViewAsync();
+        }
+    }
+
+    private async Task ScrollBusyIndicatorIntoViewAsync()
+    {
+        try
+        {
+            await SettingsFormScroll.ScrollToAsync(
+                BusyIndicator,
+                ScrollToPosition.MakeVisible,
+                false);
+        }
+        catch
+        {
+            // The form may be detaching during navigation.
+        }
+    }
+
+    private sealed record ScheduleExceptionRow(
+        DateOnly Date,
+        ScheduleExceptionType Type,
+        string DateLabel,
+        string TypeLabel);
+
+    private enum SettingsSaveFollowUp
+    {
+        StayedOnPage = 0,
+        ReadyToLeave = 1
     }
 }

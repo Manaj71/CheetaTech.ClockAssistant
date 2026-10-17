@@ -82,9 +82,9 @@ builder.Services.AddSingleton<
         builder.Services.AddSingleton<CheetaTech.ClockAssistant.Core.Attendance.IAttendanceNotificationDecisionService, CheetaTech.ClockAssistant.Core.Attendance.AttendanceNotificationDecisionService>();
 
 #if ANDROID
-        builder.Services.AddSingleton<CheetaTech.ClockAssistant.App.Services.Notifications.IAttendanceReminderScheduler, CheetaTech.ClockAssistant.App.Platforms.Android.AndroidAttendanceReminderScheduler>();
+        builder.Services.AddSingleton<CheetaTech.ClockAssistant.Core.Attendance.IAttendanceReminderScheduler, CheetaTech.ClockAssistant.App.Platforms.Android.AndroidAttendanceReminderScheduler>();
 #else
-        builder.Services.AddSingleton<CheetaTech.ClockAssistant.App.Services.Notifications.IAttendanceReminderScheduler, CheetaTech.ClockAssistant.App.Services.Notifications.UnavailableAttendanceReminderScheduler>();
+        builder.Services.AddSingleton<CheetaTech.ClockAssistant.Core.Attendance.IAttendanceReminderScheduler, CheetaTech.ClockAssistant.App.Services.Notifications.UnavailableAttendanceReminderScheduler>();
 #endif
         builder.Services.AddSingleton<CheetaTech.ClockAssistant.Core.Attendance.AttendanceSnoozePlanner>();
 
@@ -99,7 +99,7 @@ builder.Services.AddSingleton<
         builder.Services.AddSingleton<AttendanceHistoryRecorder>();
 
         builder.Services.AddSingleton<CheetaTech.ClockAssistant.Core.Attendance.IAttendanceReminderPlanningService, CheetaTech.ClockAssistant.Core.Attendance.AttendanceReminderPlanningService>();
-        builder.Services.AddSingleton<CheetaTech.ClockAssistant.App.Services.Notifications.IAttendanceReminderStartupCoordinator, CheetaTech.ClockAssistant.App.Services.Notifications.AttendanceReminderStartupCoordinator>();
+        builder.Services.AddSingleton<CheetaTech.ClockAssistant.Core.Attendance.IAttendanceReminderStartupCoordinator, CheetaTech.ClockAssistant.Core.Attendance.AttendanceReminderStartupCoordinator>();
 
         builder.Services.AddSingleton<CheetaTech.ClockAssistant.App.Services.Diagnostics.IAttendanceActionAuditLog, CheetaTech.ClockAssistant.App.Services.Diagnostics.FileAttendanceActionAuditLog>();
 

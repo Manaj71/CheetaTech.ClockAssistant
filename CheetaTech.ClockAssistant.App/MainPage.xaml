@@ -39,6 +39,13 @@
                     FontSize="16"
                     LineBreakMode="WordWrap" />
 
+                <Label
+                    x:Name="ExceptionInfoLabel"
+                    IsVisible="False"
+                    FontSize="13"
+                    Opacity="0.85"
+                    LineBreakMode="WordWrap" />
+
                 <Border
                     Padding="12"
                     StrokeThickness="1">
@@ -104,6 +111,7 @@
 
         <controls:AdMobBannerView
             Grid.Row="1"
+            Margin="0,0,0,12"
             VerticalOptions="End"
             HorizontalOptions="Fill" />
     </Grid>

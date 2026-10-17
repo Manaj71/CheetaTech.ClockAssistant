@@ -9,6 +9,14 @@ public sealed record ClockAssistantConfiguration
     public IReadOnlyCollection<DayOfWeek> WorkDays { get; init; }
         = Array.Empty<DayOfWeek>();
 
+    /// <summary>
+    /// Per-date local reminder exceptions. Default empty.
+    /// Additive; absent in legacy saved configuration deserializes as empty.
+    /// Reminder settings only — not UKG leave records.
+    /// </summary>
+    public IReadOnlyList<ScheduleDayException> ScheduleExceptions { get; init; }
+        = Array.Empty<ScheduleDayException>();
+
     public TimeOnly? ClockInTime { get; init; }
 
     public TimeOnly? ClockOutTime { get; init; }

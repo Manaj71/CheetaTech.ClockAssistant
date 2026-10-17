@@ -1,7 +1,7 @@
 using Android.App;
 using Android.Content;
 using Android.Provider;
-using CheetaTech.ClockAssistant.App.Services.Notifications;
+using CheetaTech.ClockAssistant.Core.Attendance;
 
 namespace CheetaTech.ClockAssistant.App.Platforms.Android;
 
@@ -42,18 +42,8 @@ public sealed class AndroidAttendanceReminderScheduler
 
         try
         {
-            var intent = new Intent(
-                _appContext,
-                typeof(AttendanceReminderAlarmReceiver));
-
-            intent.SetAction(
-                AttendanceReminderAlarmReceiver.ActionAttendanceReminder);
-
-            var pendingIntent = PendingIntent.GetBroadcast(
-                _appContext,
-                ReminderRequestCode,
-                intent,
-                GetPendingIntentFlags());
+            var pendingIntent = CreateReminderPendingIntent(
+                PendingIntentFlags.UpdateCurrent);
 
             if (pendingIntent is null)
             {
@@ -94,6 +84,36 @@ public sealed class AndroidAttendanceReminderScheduler
         }
     }
 
+    public Task<AttendanceReminderCancelResult> CancelScheduledReminderAsync(
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        try
+        {
+            var pendingIntent = CreateReminderPendingIntent(
+                PendingIntentFlags.NoCreate);
+
+            if (pendingIntent is null)
+            {
+                // Nothing currently scheduled for this identity.
+                return Task.FromResult(
+                    AttendanceReminderCancelResult.Cancelled);
+            }
+
+            _alarmManager.Cancel(pendingIntent);
+            pendingIntent.Cancel();
+
+            return Task.FromResult(
+                AttendanceReminderCancelResult.Cancelled);
+        }
+        catch
+        {
+            return Task.FromResult(
+                AttendanceReminderCancelResult.Failed);
+        }
+    }
+
     public Task<bool> OpenExactAlarmSettingsAsync(
         CancellationToken cancellationToken = default)
     {
@@ -124,10 +144,26 @@ public sealed class AndroidAttendanceReminderScheduler
         }
     }
 
-    private static PendingIntentFlags GetPendingIntentFlags()
+    private PendingIntent? CreateReminderPendingIntent(
+        PendingIntentFlags baseFlags)
     {
-        var flags = PendingIntentFlags.UpdateCurrent;
+        var intent = new Intent(
+            _appContext,
+            typeof(AttendanceReminderAlarmReceiver));
 
+        intent.SetAction(
+            AttendanceReminderAlarmReceiver.ActionAttendanceReminder);
+
+        return PendingIntent.GetBroadcast(
+            _appContext,
+            ReminderRequestCode,
+            intent,
+            ApplyImmutableFlag(baseFlags));
+    }
+
+    private static PendingIntentFlags ApplyImmutableFlag(
+        PendingIntentFlags flags)
+    {
         if (OperatingSystem.IsAndroidVersionAtLeast(23))
         {
             flags |= PendingIntentFlags.Immutable;

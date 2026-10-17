@@ -1,4 +1,4 @@
-using CheetaTech.ClockAssistant.App.Services.Notifications;
+using CheetaTech.ClockAssistant.Core.Attendance;
 
 namespace CheetaTech.ClockAssistant.App;
 
